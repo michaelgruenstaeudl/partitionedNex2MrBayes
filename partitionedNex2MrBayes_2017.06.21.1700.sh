@@ -4,6 +4,48 @@ CURRENTTIME() { date '+%Y-%m-%d %H:%M:%S'; }
 
 ########################################################################
 
+#Initialize variables to default values.
+NEXUS=""
+MODELTEST=""
+
+## GETOPTS CODE
+
+while getopts :f:m:hv FLAG; do
+  case $FLAG in
+    f)  NEXUS=$OPTARG
+        ;;
+    m)  MODELTEST=$OPTARG
+        ;;
+    h)  echo 'Help instructions here!' >&2
+        ;;
+    v)  echo 'Verbose mode on!' >&2
+        ;;
+    \?) echo 'Invalid option: -$OPTARG' >&2
+        exit 1
+        ;;
+    :)  echo 'Option -$OPTARG requires an argument.' >&2
+        exit 1
+        ;;
+  esac
+done
+
+#shift $((OPTIND-1))
+
+## LEGACYCODE - DELETE, IF NOT USED
+
+## Checking number of arguments (NEXUS file, ModelTestJar)
+#if [[ $# != 2 ]];
+#then
+#    echo -ne " ERROR | $(CURRENTTIME) | Incorrect number of input files specified.\n"
+#    exit 1
+#fi
+#
+## Assign infiles to variables
+#NEXUS=$1
+#MODELTEST=$2 # /home/michael_science/binaries/jModelTest_2.1.7/jModelTest.jar
+
+########################################################################
+
 TITLE="nex2partMrBayes.sh"
 DESCRIPTION="Shell script to convert NEXUS alignment with charsets to partitioned MrBayes analysis file"
 AUTHOR="Michael Gruenstaeudl, PhD"
@@ -15,6 +57,8 @@ DEPENDENCIES="python2, biopython"
 
 echo -ne "\n Title: $TITLE | Version: $VERSION | Author: $AUTHOR\n"
 echo -ne " Usage: $USAGE\n"
+
+########################################################################
 
 #    This script converts a DNA alignment in NEXUS format that contains 
 #    character set (i.e., charset) specifications into a partitioned 
@@ -47,6 +91,23 @@ echo -ne " Usage: $USAGE\n"
 #            -s 89952
 #            -e 115128
 #            -o TESTFELD/GeneNames.txt
+
+########################################################################
+
+## TO DO
+
+# - Include a test to see if the entire alignment is covered by charsets. If not, spit out an ERROR. 
+#
+# - Include a test to see if the character definitions overlap. If not, spit out an ERROR. Charset definitions must not overlap. Otherwise regions will be counted twice.
+#
+# - Provide a -h help command that provides all detailed info. Also: --verbose, --version, --info
+#
+# - Wrap the N-of-cores evaluation into a try-statement (so that N=1 can be selected in the worst scenario).
+#
+# - Design such that STEPS 3, 4 and 5 are integrated into the loop.
+#
+# - Make the selection of the number of cores an input variable. The number of cores are only inferred via ´grep -c ^processor /proc/cpuinfo´ if the user hasn't set it manually.
+#
 
 ########################################################################
 
@@ -183,62 +244,30 @@ write_mrbayes_block()
     echo -e 'end;\n\nquit;' >> $2
 }
 
-## TO DO
-#
-# - Include a test to see if the entire alignment is covered by charsets. If not, spit out an ERROR. 
-#
-# - Include a test to see if the character definitions overlap. If not, spit out an ERROR. Charset definitions must not overlap. Otherwise regions will be counted twice.
-#
-# - Provide a -h help command that provides all detailed info. Also: --verbose, --version, --info
-#
-# - Wrap the N-of-cores evaluation into a try-statement (so that N=1 can be selected in the worst scenario).
-#
-# - Design such that STEPS 3, 4 and 5 are integrated into the loop.
-#
-# - Make the selection of the number of cores an input variable. The number of cores are only inferred via ´grep -c ^processor /proc/cpuinfo´ if the user hasn't set it manually.
-#
-
 ########################################################################
 
-## Step 01: Intro display and exception handling
+## Step 01: Checking infiles
 echo -ne " INFO  | $(CURRENTTIME) | Step 01: Checking infiles\n"
 
-# Checking number of arguments (NEXUS file, ModelTestJar)
-if [[ $# != 2 ]];
-then
-    echo -ne " ERROR | $(CURRENTTIME) | Incorrect number of input files specified.\n"
-    exit 1
-fi
-
-# Assign infiles to variables
-NEXUS=$1
-MODELTEST=$2 # /home/michael_science/binaries/jModelTest_2.1.7/jModelTest.jar
-
 # Checking if input files exists
-if [[ ! -f $NEXUS ]];
-then 
+if [[ ! -f $NEXUS ]]; then 
     echo -ne " ERROR | $(CURRENTTIME) | File not found: $NEXUS\n"
     exit 1
 fi
-
-if [[ ! -f $MODELTEST ]];
-then 
+if [[ ! -f $MODELTEST ]]; then 
     echo -ne " ERROR | $(CURRENTTIME) | File not found: $MODELTEST\n"
     exit 1
 fi
 
-# Checking if input files are specified as absolute paths
-if [[ ! $NEXUS = /* ]];
-then
-    echo -ne " ERROR | $(CURRENTTIME) | File path not absolute: $NEXUS\n"
-    exit 1
-fi
-
-if [[ ! $MODELTEST = /* ]];
-then
-    echo -ne " ERROR | $(CURRENTTIME) | File path not absolute: $MODELTEST\n"
-    exit 1
-fi
+## Checking if input files are specified as absolute paths
+#if [[ ! $NEXUS = /* ]]; then
+#    echo -ne " ERROR | $(CURRENTTIME) | File path not absolute: $NEXUS\n"
+#    exit 1
+#fi
+#if [[ ! $MODELTEST = /* ]]; then
+#    echo -ne " ERROR | $(CURRENTTIME) | File path not absolute: $MODELTEST\n"
+#    exit 1
+#fi
 
 # Define outfile namestem
 BASENAME=$(basename $NEXUS) # Using basename to strip off path
@@ -375,3 +404,5 @@ rm -r $TMPFLD
 
 echo -e " INFO  | $(CURRENTTIME) | Processing complete for: $NEXUS\n" # End of file message
 exit 0 # exit without mistakes
+
+########################################################################
