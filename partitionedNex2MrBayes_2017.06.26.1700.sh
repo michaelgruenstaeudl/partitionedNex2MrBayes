@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.06.22.1100"
+VERSION="2017.06.26.1700"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -34,7 +34,7 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 # (a)   Include a test to see if the entire alignment is covered by 
 #       charsets. If not, spit out an ERROR.
-# (b)   Include a test to see if the character definitions overlap. 
+# DONE  Include a test to see if the character definitions overlap. 
 #       If not, spit out an ERROR. Charset definitions must not 
 #       overlap. Otherwise regions will be counted twice.
 # (c)   Design such that STEPS 3, 4 and 5 are integrated into the loop.
@@ -131,17 +131,41 @@ split_nexus_into_blocks()
     sed -n '/matrix\|MATRIX\|Matrix/{:a;n;/;/b;p;ba}' $2 > $4
 }
 
-confirm_validity_of_partitions()
-#   This function ... .
-#   It eventually sets up the file containing the corrected, unsplit charsets
-#   INP:  $1: name of ...
-#         $2: name of file containing the SETS-block
-#         $3: name of file containing the corrected, unsplit charsets
-#   OUP:  file with ...
+test_if_partitions_overlap()
+#   This function tests if any of the partitions (i.e., charset ranges)
+#   overlap. If they do, an error is thrown.
+#   INP:  $1: name of file containing the SETS-block
+#   OUP:  none
 {
-    #sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $2 | grep 'charset\|CHARSET\|CharSet' > $3
-    sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet' > $2
+    CHARSET_LINES=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    CHARSET_RNGES=$(echo "$CHARSET_LINES" | awk '{print $4}' | sed 's/\;//')
+
+    # Test if any of the charset ranges are overlapping
+    CHARSET_OVRLP=$(echo "$CHARSET_RNGES" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
+    if [ ! "$CHARSET_OVRLP" = "" ]; then 
+        echo -ne " ERROR | $(get_current_time) | Charset range overlaps with subsequent range: $CHARSET_OVRLP\n"
+        exit 1
+    fi
 }
+
+test_if_partitions_continuous_range()
+#   This function tests if the partitions form a continuous range. 
+#   If the partitions don't form such a continuous range, additional
+#   ranges are inserted  such that all ranges taken together form a 
+#   continuous range from {1} to {upper bound of the last range}.
+#   INP:  $1: name of file containing the SETS-block
+#   OUP:  $2: name of file containing the unsplit charsets
+{
+    #sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $TMPFLD/$SETSBLOC | grep 'charset\|CHARSET\|CharSet' > $TMPFLD/$UNSPLT_C
+
+    # From discrete to continuous range
+    CHARSET_LINES=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    # Save unsplit charsets
+    echo "$CHARSET_LINES" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1' > $2
+    # Update SETS-block
+    echo -e "begin sets;\n$CHARSET_LINES\nend;" > $1
+}
+
 
 split_matrix_into_partitions()
 #   This function takes the matrix of a NEXUS file and extracts from it a 
@@ -167,7 +191,7 @@ split_matrix_into_partitions()
         CHARRNG_FNAME=${CHARSET_FNAME}_range
         PARTITION_FNAME=partition_${CHARSET_FNAME}                      # Define partition filename
         echo "$line" | awk '{print $4}' | sed 's/\;//' > $1/$CHARRNG_FNAME  # Get the info on the charset range
-        echo -e "$NEXUS_P1 $NEXUS_P2 $NEXUS_P3" > $1/$PARTITION_FNAME             # Step 1 of assembling the new partition file
+        echo -e "$NEXUS_P1 $NEXUS_P2 $NEXUS_P3" > $1/$PARTITION_FNAME   # Step 1 of assembling the new partition file
         awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$CHARRNG_FNAME FS=' ' $3 >> $1/$PARTITION_FNAME  # Step 2 of assembling the new partition file: Add the sub-matrix
         echo -e "$NEXUS_P4" >> $1/$PARTITION_FNAME                      # Step 3 of assembling the new partition file
         NEW_LENGTH=$(awk '{print $2-$1+1}' FS='-' $TMPFLD/$CHARRNG_FNAME)   # Get the length of the sub-matrix
@@ -319,23 +343,35 @@ split_nexus_into_blocks $NEXUS $TMPFLD/$DATABLOC $TMPFLD/$SETSBLOC $TMPFLD/$UNSP
 
 ########################################################################
 
-## Step 03a: Confirm validity of partitions
+## Step 03a: Confirm that partitions do not overlap
 if [ $VERBOSE_BOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm validity of partitions\n"
+    echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm that partitions do not overlap\n"
 fi
 
-# CONTINUE HERE!
-#exit 1
-confirm_validity_of_partitions $TMPFLD/$SETSBLOC $TMPFLD/UNSPLT_C
+test_if_partitions_overlap $TMPFLD/$SETSBLOC
 
 ########################################################################
 
-## Step 03b: Splitting matrix into partitions
+## Step 03b: Confirm that partitions form a continuous range
 if [ $VERBOSE_BOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 03b: Splitting matrix into partitions\n"
+    echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm that partitions form a continuous range\n"
 fi
 
-split_matrix_into_partitions $TMPFLD $TMPFLD/$DATABLOC $TMPFLD/$UNSPLT_M $TMPFLD/UNSPLT_C
+#TOTAL_LEN=$( $TMPFLD/$DATABLOC)
+
+test_if_partitions_continuous_range $TMPFLD/$SETSBLOC $TMPFLD/$UNSPLT_C
+
+# Important: Update charsets
+CHARSETS=$(cat $TMPFLD/$SETSBLOC | grep 'charset\|CharSet\|CHARSET')
+
+########################################################################
+
+## Step 03c: Splitting matrix into partitions
+if [ $VERBOSE_BOOL -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Step 03c: Splitting matrix into partitions\n"
+fi
+
+split_matrix_into_partitions $TMPFLD $TMPFLD/$DATABLOC $TMPFLD/$UNSPLT_M $TMPFLD/$UNSPLT_C
 
 ########################################################################
 
