@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.06.26.1700"
+VERSION="2017.06.26.2200"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -55,7 +55,7 @@ set -e
 # Initialize variables to default values
 OPT_A="file path to, and name of, the NEXUS file"
 OPT_B="file path to, and name of, the jModelTest jar file"
-VERBOSE_BOOL=0
+vrbseBool=0
 
 # Set fonts for help function
 NORM=`tput sgr0`
@@ -63,7 +63,7 @@ BOLD=`tput bold`
 REV=`tput smso`
 
 # Help function
-function HELP {
+function my_help {
     echo -e \\n"Help documentation for ${BOLD}$THIS_SCRIPT${NORM}."\\n
     echo -e "Version: $VERSION | Author: $AUTHOR"\\n
     echo -e "${REV}Usage:${NORM} $USAGE"\\n
@@ -80,7 +80,7 @@ function HELP {
 NUMARGS=$#
 #echo -e \\n"Number of arguments: $NUMARGS"
 if [ $NUMARGS -eq 0 ]; then
-    HELP
+    my_help
 fi
 
 ########################################################################
@@ -95,7 +95,7 @@ while getopts :f:m:hv FLAG; do
         ;;
     h)  HELP
         ;;
-    v)  VERBOSE_BOOL=1
+    v)  vrbseBool=1
         ;;
     \?) echo 'Invalid option: -$OPTARG' >&2
         exit 1
@@ -137,8 +137,8 @@ test_if_partitions_overlap()
 #   INP:  $1: name of file containing the SETS-block
 #   OUP:  none
 {
-    CHARSET_LINES=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
-    CHARSET_RNGES=$(echo "$CHARSET_LINES" | awk '{print $4}' | sed 's/\;//')
+    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    CHARSET_RNGES=$(echo "$charsetLn" | awk '{print $4}' | sed 's/\;//')
 
     # Test if any of the charset ranges are overlapping
     CHARSET_OVRLP=$(echo "$CHARSET_RNGES" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
@@ -154,16 +154,17 @@ test_if_partitions_continuous_range()
 #   ranges are inserted  such that all ranges taken together form a 
 #   continuous range from {1} to {upper bound of the last range}.
 #   INP:  $1: name of file containing the SETS-block
-#   OUP:  $2: name of file containing the unsplit charsets
+#   OUP:  update of $1
 {
-    #sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $TMPFLD/$SETSBLOC | grep 'charset\|CHARSET\|CharSet' > $TMPFLD/$UNSPLT_C
-
-    # From discrete to continuous range
-    CHARSET_LINES=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
-    # Save unsplit charsets
-    echo "$CHARSET_LINES" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1' > $2
+    # Get charset definition lines
+    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    # Convert from discrete to continuous range
+    CHARSET_UPDAT=$(echo "$charsetLn" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1')
+    # Add end partition, if missing
+    # CODE HERE
+    
     # Update SETS-block
-    echo -e "begin sets;\n$CHARSET_LINES\nend;" > $1
+    echo -e "begin sets;\n$CHARSET_UPDAT\nend;" > $1
 }
 
 
@@ -174,29 +175,39 @@ split_matrix_into_partitions()
 #   INP:  $1: path to temp folder
 #         $2: name of complete NEXUS file
 #         $3: name of file containing the unsplit matrix
-#         $4: name of file containing the unsplit charsets
-#   OUP:  file with name $CHARRNG_FNAME in temp folder
-#         file with name $PARTITION_FNAME in temp folder
+#         $4: name of file containing the SETS-block
+#   OUP:  file with name $charrngFn in temp folder
+#         file with name $partFname in temp folder
 {
-    NEXUS_P1='\n#NEXUS'
-    NEXUS_P2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2)
-    NEXUS_P3='\nMATRIX'
-    NEXUS_P4=';\nEND;\n'
-    COUNTER=0
+    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $4 | grep 'charset\|CHARSET\|CharSet')
+    nexusFile_P1='\n#NEXUS'
+    nexusFile_P2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2)
+    nexusFile_P3='\nMATRIX'
+    nexusFile_P4=';\nEND;\n'
+    myCounter=0
     while IFS= read -r line; do 
-        COUNTER=$((COUNTER+1))
-        CHARSET_FNAME_P1=$(printf %03d $COUNTER)
-        CHARSET_FNAME_P2=$(echo "$line" | awk '{print $2}')             # Get the gene name, which is the second word per line.
-        CHARSET_FNAME=${CHARSET_FNAME_P1}_${CHARSET_FNAME_P2}           # Prepend number to the charset name
-        CHARRNG_FNAME=${CHARSET_FNAME}_range
-        PARTITION_FNAME=partition_${CHARSET_FNAME}                      # Define partition filename
-        echo "$line" | awk '{print $4}' | sed 's/\;//' > $1/$CHARRNG_FNAME  # Get the info on the charset range
-        echo -e "$NEXUS_P1 $NEXUS_P2 $NEXUS_P3" > $1/$PARTITION_FNAME   # Step 1 of assembling the new partition file
-        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$CHARRNG_FNAME FS=' ' $3 >> $1/$PARTITION_FNAME  # Step 2 of assembling the new partition file: Add the sub-matrix
-        echo -e "$NEXUS_P4" >> $1/$PARTITION_FNAME                      # Step 3 of assembling the new partition file
-        NEW_LENGTH=$(awk '{print $2-$1+1}' FS='-' $TMPFLD/$CHARRNG_FNAME)   # Get the length of the sub-matrix
-        sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$NEW_LENGTH\;/" $1/$PARTITION_FNAME  # Replace the number of characters with the length of the sub-matrix
-    done < $4
+        myCounter=$((myCounter+1))
+        charsetFn_P1=$(printf %03d $myCounter)
+        # Get the gene name, which is the second word per line.
+        charsetFn_P2=$(echo "$line" | awk '{print $2}')
+        # Prepend number to the charset name
+        charsetFn=${charsetFn_P1}_${charsetFn_P2}
+        charrngFn=${charsetFn}_range
+        # Define partition filename
+        partFname=partition_${charsetFn}
+        # Get the info on the charset range
+        echo "$line" | awk '{print $4}' | sed 's/\;//' > $1/$charrngFn
+        # Step 1 of assembling the new partition file
+        echo -e "$nexusFile_P1 $nexusFile_P2 $nexusFile_P3" > $1/$partFname
+        # Step 2 of assembling the new partition file: Add the sub-matrix
+        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' $3 >> $1/$partFname
+        # Step 3 of assembling the new partition file
+        echo -e "$nexusFile_P4" >> $1/$partFname
+        # Get the length of the sub-matrix
+        NEW_LENGTH=$(awk '{print $2-$1+1}' FS='-' $tempFoldr/$charrngFn)
+        # Replace the number of characters with the length of the sub-matrix
+        sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$NEW_LENGTH\;/" $1/$partFname
+    done <<< "$charsetLn" # Using a here-string
 }
 
 convert_models_into_lset()
@@ -257,7 +268,7 @@ convert_models_into_lset()
 }
 
 write_mrbayes_block()
-#   This function appends a MrBayes block to a file ($OUTFNAME).
+#   This function appends a MrBayes block to a file ($outFilenm).
 #   INP:  $1: path to temp folder
 #         $2: name of outfile
 #         $3: name of lset specs file
@@ -276,115 +287,108 @@ write_mrbayes_block()
     echo 'prset applyto=(all) ratepr=variable;' >> $2
     echo 'unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);' >> $2
     echo -e 'mcmcp ngen=20000000 temp=0.1 samplefreq=10000;\nmcmc;' >> $2
-    echo -e "sump burnin=1000 filen=$NEXUS nrun=2;" >> $2 # Double quotes are critical here due to variable
-    echo -e "sumt burnin=1000 filen=$NEXUS nrun=2;" >> $2 # Double quotes are critical here due to variable
+    echo -e "sump burnin=1000 filen=$nexusFile nrun=2;" >> $2 # Double quotes are critical here due to variable
+    echo -e "sumt burnin=1000 filen=$nexusFile nrun=2;" >> $2 # Double quotes are critical here due to variable
     echo -e 'end;\n\nquit;' >> $2
 }
 
 ########################################################################
 
 ## Step 01: Checking infiles
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 01: Checking infiles\n"
 fi
 
 # Renaming input variables
-NEXUS=$OPT_A
-MODELTEST=$OPT_B
+nexusFile=$OPT_A
+mdltstBin=$OPT_B
 
 # Checking if input files exists
-if [[ ! -f $NEXUS ]]; then 
-    echo -ne " ERROR | $(get_current_time) | Not found: $NEXUS\n"
+if [[ ! -f $nexusFile ]]; then 
+    echo -ne " ERROR | $(get_current_time) | Not found: $nexusFile\n"
     exit 1
 fi
-if [[ ! -f $MODELTEST ]]; then 
-    echo -ne " ERROR | $(get_current_time) | Not found: $MODELTEST\n"
+if [[ ! -f $mdltstBin ]]; then 
+    echo -ne " ERROR | $(get_current_time) | Not found: $mdltstBin\n"
     exit 1
 fi
 
 # Define outfile namestem
-BASENAME=$(basename $NEXUS) # Using basename to strip off path
-FILESTEM=${BASENAME%.nex*} # Using parameter expansion to remove file extension
+baseName=$(basename $nexusFile) # Using basename to strip off path
+filenStem=${baseName%.nex*} # Using parameter expansion to remove file extension
 
 # Define outfile names
-DATABLOC=${FILESTEM}_DataBlock
-SETSBLOC=${FILESTEM}_SetsBlock
-UNSPLT_M=${FILESTEM}_UnsplitMatrix
-UNSPLT_C=${FILESTEM}_UnsplitCharsets
-MDLOVRVW=${FILESTEM}_ModelOverview
-LSETSPEC=${FILESTEM}_LsetSpecs
-OUTFNAME=${FILESTEM}_partitioned.mrbayes
-
-# Parsing charsets from NEXUS file
-CHARSETS=$(cat $NEXUS | grep 'charset\|CharSet\|CHARSET')
+dataBlock=${filenStem}_DataBlock
+setsBlock=${filenStem}_SetsBlock
+unspltMtx=${filenStem}_UnsplitMatrix
+mdlOvervw=${filenStem}_ModelOverview
+lsetSpecs=${filenStem}_LsetSpecs
+outFilenm=${filenStem}_partitioned.mrbayes
 
 # Evaluate number of cores available on Desktop machine
-CORES=$(grep -c ^processor /proc/cpuinfo)
+nmbrCores=$(grep -c ^processor /proc/cpuinfo)
 
 # Check if outfile already exists
-if [[ $OUTFNAME = /* ]];
+if [[ $outFilenm = /* ]];
 then
-    echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $OUTFNAME\n"
+    echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $outFilenm\n"
     exit 1
 fi
 
 # Make and cd into temporary folder
-TMPFLD=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
-mkdir -p $TMPFLD
+tempFoldr=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
+mkdir -p $tempFoldr
 
 ########################################################################
 
 ## Step 02: Splitting NEXUS file into blocks
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 02: Splitting NEXUS file into blocks\n"
 fi
 
-split_nexus_into_blocks $NEXUS $TMPFLD/$DATABLOC $TMPFLD/$SETSBLOC $TMPFLD/$UNSPLT_M
+split_nexus_into_blocks $nexusFile $tempFoldr/$dataBlock $tempFoldr/$setsBlock $tempFoldr/$unspltMtx
 
 ########################################################################
 
 ## Step 03a: Confirm that partitions do not overlap
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm that partitions do not overlap\n"
 fi
 
-test_if_partitions_overlap $TMPFLD/$SETSBLOC
+test_if_partitions_overlap $tempFoldr/$setsBlock
 
 ########################################################################
 
 ## Step 03b: Confirm that partitions form a continuous range
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm that partitions form a continuous range\n"
 fi
 
-#TOTAL_LEN=$( $TMPFLD/$DATABLOC)
+#TOTAL_LEN=$( $tempFoldr/$dataBlock)
 
-test_if_partitions_continuous_range $TMPFLD/$SETSBLOC $TMPFLD/$UNSPLT_C
-
-# Important: Update charsets
-CHARSETS=$(cat $TMPFLD/$SETSBLOC | grep 'charset\|CharSet\|CHARSET')
+test_if_partitions_continuous_range $tempFoldr/$setsBlock
 
 ########################################################################
 
 ## Step 03c: Splitting matrix into partitions
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 03c: Splitting matrix into partitions\n"
 fi
 
-split_matrix_into_partitions $TMPFLD $TMPFLD/$DATABLOC $TMPFLD/$UNSPLT_M $TMPFLD/$UNSPLT_C
+split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$unspltMtx $tempFoldr/$setsBlock
 
 ########################################################################
 
 ## Step 04: Conducting modeltesting via jModelTest2
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 04: Conducting modeltesting via jModelTest2\n"
 fi
 
-count=`ls -1 $TMPFLD/partition_* 2>/dev/null | wc -l`
+count=`ls -1 $tempFoldr/partition_* 2>/dev/null | wc -l`
 if [[ $count != 0 ]];
 then
-    for file in ./$TMPFLD/partition_*; do 
-    java -jar $MODELTEST -tr $CORES -d "$file" -g 4 -i -f -AIC -o ${file}.bestModel 1>${file}.bestModel.log 2>&1
+    for file in ./$tempFoldr/partition_*; do 
+    java -jar $mdltstBin -tr $nmbrCores -d "$file" -g 4 -i -f -AIC -o ${file}.bestModel 1>${file}.bestModel.log 2>&1
     done
 else
     echo -ne " ERROR | $(get_current_time) | No partition files (partition_*) found.\n"
@@ -394,16 +398,16 @@ fi
 ########################################################################
 
 ## Step 05: Extracting model information from jModelTest2
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 05: Extracting model information from jModelTest2\n"
 fi
 
-count=`ls -1 $TMPFLD/*.bestModel 2>/dev/null | wc -l`
+count=`ls -1 $tempFoldr/*.bestModel 2>/dev/null | wc -l`
 if [[ $count != 0 ]];
 then
-    for file in ./$TMPFLD/*.bestModel; do 
-    echo -ne "$file" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $TMPFLD/$MDLOVRVW
-    cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed 's/Model = //g' | sed 's/   / /g' >> $TMPFLD/$MDLOVRVW  # Have to use command ´cat´, cannot use ´echo´ here; not sure why.
+    for file in ./$tempFoldr/*.bestModel; do 
+    echo -ne "$file" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $tempFoldr/$mdlOvervw
+    cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed 's/Model = //g' | sed 's/   / /g' >> $tempFoldr/$mdlOvervw  # Have to use command ´cat´, cannot use ´echo´ here; not sure why.
     done
 else
     echo -ne " ERROR | $(get_current_time) | No result files of the modeltesting (*.bestModel) found.\n"
@@ -413,77 +417,80 @@ fi
 ########################################################################
 
 ## Step 06: Converting modeltest results to lset specs for MrBayes
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 06: Converting modeltest results to lset specs for MrBayes\n"
 fi
 
-if [[ ! -f $TMPFLD/$MDLOVRVW ]];
+if [[ ! -f $tempFoldr/$mdlOvervw ]];
 then 
-    echo -ne " ERROR | $(get_current_time) | File not found: $TMPFLD/$MDLOVRVW\n"
+    echo -ne " ERROR | $(get_current_time) | File not found: $tempFoldr/$mdlOvervw\n"
     exit 1
 fi
 
-awk -F'/' '{print "[# "$NF}' $TMPFLD/$MDLOVRVW > $TMPFLD/$LSETSPEC
+awk -F'/' '{print "[# "$NF}' $tempFoldr/$mdlOvervw > $tempFoldr/$lsetSpecs
 
 # Retrieving the list of best fitting models at this point
-BEST_MDLS=$(sed 's/\[\# //g' $TMPFLD/$LSETSPEC)
+bestModls=$(sed 's/\[\# //g' $tempFoldr/$lsetSpecs)
 
 # Setting up lset specifications
-convert_models_into_lset $TMPFLD $LSETSPEC
+convert_models_into_lset $tempFoldr $lsetSpecs
 
 ########################################################################
 
 ## Step 07: Replacing partition names with partition numbers (This is why ordered partitions are CRITICAL!)
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 07: Replacing partition names with partition numbers\n"
 fi
 
-# Replacing the partition name sin $LSETSPEC with the line numbers in the NEXUS file
+# Extract charsets
+CHARSETS=$(cat $tempFoldr/$setsBlock | grep 'charset\|CharSet\|CHARSET')
+
+# Replacing the partition names in $lsetSpecs with the line numbers in the charsets
 for file in $(echo "$CHARSETS" | awk '{print $2}'); do # Use doublequote-enclosing around a variable to maintain its newlines!
-LINENUM=$(echo "$CHARSETS" | awk '/'$file'/{print NR; exit}');
-sed -i "/$file/ s/applyto\=()/applyto\=($LINENUM)/" $TMPFLD/$LSETSPEC # Double quotes are critical here due to variable
+lineNumbr=$(echo "$CHARSETS" | awk '/'$file'/{print NR; exit}');
+sed -i "/$file/ s/applyto\=()/applyto\=($lineNumbr)/" $tempFoldr/$lsetSpecs # Double quotes are critical here due to variable
 done
 
 ########################################################################
 
 ## Step 08: Assembling output file
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 08: Assembling output file\n"
 fi
 
-echo -e "#NEXUS\n" > $OUTFNAME
-cat $TMPFLD/$DATABLOC >> $OUTFNAME
-echo -e "\n[" >> $OUTFNAME # SETS-block is commented out
-cat $TMPFLD/$SETSBLOC >> $OUTFNAME
-echo -e "]" >> $OUTFNAME
+echo -e "#NEXUS\n" > $outFilenm
+cat $tempFoldr/$dataBlock >> $outFilenm
+echo -e "\n[" >> $outFilenm # SETS-block is commented out
+cat $tempFoldr/$setsBlock >> $outFilenm
+echo -e "]" >> $outFilenm
 
 # Comment out SETS block
-#sed -i '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/ s/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/[\nbegin sets\;/g' $OUTFNAME
-#echo -e ']\n' >> $OUTFNAME
+#sed -i '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/ s/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/[\nbegin sets\;/g' $outFilenm
+#echo -e ']\n' >> $outFilenm
 
-echo -e "\n[\nBest-fitting models identified:\n$BEST_MDLS\n]\n" >> $OUTFNAME
+echo -e "\n[\nBest-fitting models identified:\n$bestModls\n]\n" >> $outFilenm
 
 ########################################################################
 
 ## Step 09: Generating MrBayes block
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 09: Generating MrBayes block\n"
 fi
 
-write_mrbayes_block $TMPFLD $OUTFNAME $LSETSPEC "$CHARSETS"
+write_mrbayes_block $tempFoldr $outFilenm $lsetSpecs "$CHARSETS"
 
 ########################################################################
 
 ## Step 10: Cleaning up the work directory
-if [ $VERBOSE_BOOL -eq 1 ]; then
+if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 10: Cleaning up\\n"
 fi
 
-rm -r $TMPFLD
+rm -r $tempFoldr
 
 # End of file message
-if [ $VERBOSE_BOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Processing complete for: $NEXUS\n"
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Processing complete for: $nexusFile\n"
 fi
 
 # Exit without mistakes
