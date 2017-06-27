@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.06.26.2200"
+VERSION="2017.06.27.1900"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -77,9 +77,9 @@ function my_help {
 }
 
 # Check the number of arguments. If none are passed, print help and exit.
-NUMARGS=$#
-#echo -e \\n"Number of arguments: $NUMARGS"
-if [ $NUMARGS -eq 0 ]; then
+numArgmts=$#
+#echo -e \\n"Number of arguments: $numArgmts"
+if [ $numArgmts -eq 0 ]; then
     my_help
 fi
 
@@ -121,14 +121,12 @@ split_nexus_into_blocks()
 #   INP:  $1: name of complete NEXUS file
 #         $2: name of file containing the extracted DATA-block
 #         $3: name of file containing the extracted SETS-block
-#         $4: name of file containing the unsplit matrix
 #   OUP:  file with DATA-block
 #         file with SETS-block
 {
     # Note: A conversion of the NEXUS file to lower case only is not possible, because model matching would not work
     cat $1 | sed -n '/begin data\;\|BEGIN DATA\;\|Begin Data\;/,/end\;\|END\;\|End\;/p' > $2
     cat $1 | sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/,/end\;\|END\;\|End\;/p' > $3
-    sed -n '/matrix\|MATRIX\|Matrix/{:a;n;/;/b;p;ba}' $2 > $4
 }
 
 test_if_partitions_overlap()
@@ -137,8 +135,8 @@ test_if_partitions_overlap()
 #   INP:  $1: name of file containing the SETS-block
 #   OUP:  none
 {
-    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
-    CHARSET_RNGES=$(echo "$charsetLn" | awk '{print $4}' | sed 's/\;//')
+    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    CHARSET_RNGES=$(echo "$chrsetLns" | awk '{print $4}' | sed 's/\;//')
 
     # Test if any of the charset ranges are overlapping
     CHARSET_OVRLP=$(echo "$CHARSET_RNGES" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
@@ -157,9 +155,9 @@ test_if_partitions_continuous_range()
 #   OUP:  update of $1
 {
     # Get charset definition lines
-    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
     # Convert from discrete to continuous range
-    CHARSET_UPDAT=$(echo "$charsetLn" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1')
+    CHARSET_UPDAT=$(echo "$chrsetLns" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1')
     # Add end partition, if missing
     # CODE HERE
     
@@ -173,41 +171,44 @@ split_matrix_into_partitions()
 #   character range (hereafter "sub-matrix") specified by the definition 
 #   of a charsets line.
 #   INP:  $1: path to temp folder
-#         $2: name of complete NEXUS file
-#         $3: name of file containing the unsplit matrix
-#         $4: name of file containing the SETS-block
+#         $2: name of file containing the DATA-block
+#         $3: name of file containing the SETS-block
 #   OUP:  file with name $charrngFn in temp folder
 #         file with name $partFname in temp folder
 {
-    charsetLn=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $4 | grep 'charset\|CHARSET\|CharSet')
-    nexusFile_P1='\n#NEXUS'
-    nexusFile_P2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2)
-    nexusFile_P3='\nMATRIX'
-    nexusFile_P4=';\nEND;\n'
+    pureMatrx=$(sed -n '/matrix\|MATRIX\|Matrix/{:a;n;/;/b;p;ba}' $2)
+    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $3 | grep 'charset\|CHARSET\|CharSet')
+    
+    nexusNew1='\n#NEXUS'
+    # Get section between "#NEXUS" and "MATRIX"
+    nexusNew2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2)
+    nexusNew3='\nMATRIX'
+    nexusNew4=';\nEND;\n'
     myCounter=0
     while IFS= read -r line; do 
         myCounter=$((myCounter+1))
-        charsetFn_P1=$(printf %03d $myCounter)
+        chrsetFn1=$(printf %03d $myCounter)
         # Get the gene name, which is the second word per line.
-        charsetFn_P2=$(echo "$line" | awk '{print $2}')
+        chrsetFn2=$(echo "$line" | awk '{print $2}')
         # Prepend number to the charset name
-        charsetFn=${charsetFn_P1}_${charsetFn_P2}
+        charsetFn=${chrsetFn1}_${chrsetFn2}
         charrngFn=${charsetFn}_range
         # Define partition filename
         partFname=partition_${charsetFn}
         # Get the info on the charset range
         echo "$line" | awk '{print $4}' | sed 's/\;//' > $1/$charrngFn
         # Step 1 of assembling the new partition file
-        echo -e "$nexusFile_P1 $nexusFile_P2 $nexusFile_P3" > $1/$partFname
+        echo -e "$nexusNew1 $nexusNew2 $nexusNew3" > $1/$partFname
         # Step 2 of assembling the new partition file: Add the sub-matrix
-        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' $3 >> $1/$partFname
+        ## LEGACYLINE: #awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' pureMatrx >> $1/$partFname 
+        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' <(echo "$pureMatrx") >> $1/$partFname
         # Step 3 of assembling the new partition file
-        echo -e "$nexusFile_P4" >> $1/$partFname
+        echo -e "$nexusNew4" >> $1/$partFname
         # Get the length of the sub-matrix
         NEW_LENGTH=$(awk '{print $2-$1+1}' FS='-' $tempFoldr/$charrngFn)
         # Replace the number of characters with the length of the sub-matrix
         sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$NEW_LENGTH\;/" $1/$partFname
-    done <<< "$charsetLn" # Using a here-string
+    done <<< "$chrsetLns" # Using a here-string
 }
 
 convert_models_into_lset()
@@ -346,7 +347,21 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 02: Splitting NEXUS file into blocks\n"
 fi
 
-split_nexus_into_blocks $nexusFile $tempFoldr/$dataBlock $tempFoldr/$setsBlock $tempFoldr/$unspltMtx
+split_nexus_into_blocks $nexusFile $tempFoldr/$dataBlock $tempFoldr/$setsBlock
+
+# Check if dataBlock successfully generated
+if [ ! -s $tempFoldr/$dataBlock ];
+then
+    echo -ne " ERROR | $(get_current_time) | No file size: $dataBlock\n"
+    exit 1
+fi
+
+# Check if setsBlock successfully generated
+if [ ! -s $tempFoldr/$setsBlock ];
+then
+    echo -ne " ERROR | $(get_current_time) | No file size: $setsBlock\n"
+    exit 1
+fi
 
 ########################################################################
 
@@ -375,7 +390,7 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 03c: Splitting matrix into partitions\n"
 fi
 
-split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$unspltMtx $tempFoldr/$setsBlock
+split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$setsBlock
 
 ########################################################################
 
@@ -476,6 +491,9 @@ echo -e "\n[\nBest-fitting models identified:\n$bestModls\n]\n" >> $outFilenm
 if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 09: Generating MrBayes block\n"
 fi
+
+# Extract charsets
+CHARSETS=$(cat $tempFoldr/$setsBlock | grep 'charset\|CharSet\|CHARSET')
 
 write_mrbayes_block $tempFoldr $outFilenm $lsetSpecs "$CHARSETS"
 
