@@ -7,21 +7,15 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.06.27.2000"
+VERSION="2017.06.29.1600"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
 
-#    This script converts a DNA alignment in NEXUS format that contains 
-#    character set (i.e., charset) specifications into a partitioned 
-#    NEXUS file ready for analysis with MrBayes. The character sets are 
-#    hereby extracted, passed to modeltesting with jModelTest to identify 
-#    the best-fitting model of nucleotide substitition and then 
-#    concatenated. Only regions of the input alignment with a character 
-#    set designations are passed to modeltesting and are concatenated
-#    into the output alignment. The best-fitting nucleotide subtsitution 
-#    models are converted to the specifications read by MrBayes.    
-#    
+#    The script converts a DNA alignment in NEXUS format that contains character set ("charset") definitions into a partitioned NEXUS file ready for analysis with MrBayes. The character sets (hereafter "partitions") are hereby extracted, passed to modeltesting with jModelTest to identify the best-fitting model of nucleotide substitition and then concatenated again. The best-fitting nucleotide substitution models are converted to the specifications read by MrBayes. A command block for MrBayes is appended to the NEXUS file that integrates these partition definitions.
+
+#    Several tests regarding the character set definitions are performed during the execution of the script. First, the script evaluates if the entire alignment is covered by partitions. If not, additional partitions are defined so that all partitions together form a continuous range from {1} to {total size of matrix}. Second, the script evaluates if any of the character definitions overlap with one another. If an overlap is detected, the script exists with an error. Consequently, the initial character set definitions of the NEXUS file do not need to cover the entire alignment length, but must not be overlapping.
+
 #    ARGS:
 #        NEXUS file:    file path to, and name of, the NEXUS file
 #        MODELTEST jar: file path to, and name of, the jModelTest jar file
@@ -32,11 +26,6 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 # TO-DO LIST
 
-# (a)   Include a test to see if the entire alignment is covered by 
-#       charsets. If not, spit out an ERROR.
-# DONE  Include a test to see if the character definitions overlap. 
-#       If not, spit out an ERROR. Charset definitions must not 
-#       overlap. Otherwise regions will be counted twice.
 # (c)   Design such that STEPS 3, 4 and 5 are integrated into the loop.
 # (d)   Wrap the N-of-cores evaluation into a try-statement 
 #       (so that N=1 can be selected in the worst scenario).
@@ -149,20 +138,22 @@ test_if_partitions_overlap()
 test_if_partitions_continuous_range()
 #   This function tests if the partitions form a continuous range. 
 #   If the partitions don't form such a continuous range, additional
-#   ranges are inserted  such that all ranges taken together form a 
-#   continuous range from {1} to {upper bound of the last range}.
+#   ranges are inserted such that all ranges taken together form a 
+#   continuous range from {1} to {total size of matrix}.
 #   INP:  $1: name of file containing the SETS-block
+#         $2: total size of matrix
 #   OUP:  update of $1
 {
     # Get charset definition lines
     chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
     # Convert from discrete to continuous range
-    CHARSET_UPDAT=$(echo "$chrsetLns" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1')
-    # Add end partition, if missing
-    # CODE HERE
-    
+    ## LEGACYCODE: #charstUpd=$(echo "$chrsetLns" | awk -F'[ -]' ' $4-Q>1 {print "CharSet new" ++o " =", Q+1 "-" $4-1 ";" ; Q=$5} 1')
+    contRnge1=$(echo "$chrsetLns" | awk -F'[[:space:]]*|-' ' $4-Q>1 {print "CharSet new" ++o " = " Q+1 "-" $4-1 ";" ; Q=$5} 1')
+    # Add concluding partition, if missing
+    matrxLngth=$2
+    contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "CharSet newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
-    echo -e "begin sets;\n$CHARSET_UPDAT\nend;" > $1
+    echo -e "begin sets;\n$contRnge1\n$contRnge2\nend;" > $1
 }
 
 
@@ -372,9 +363,8 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 03a: Confirm that partitions form a continuous range\n"
 fi
 
-#TOTAL_LEN=$( $tempFoldr/$dataBlock)
-
-test_if_partitions_continuous_range $tempFoldr/$setsBlock
+ncharVar=$(grep ^DIMENSIONS $tempFoldr/$dataBlock | sed -n 's/.*NCHAR=\([^;]*\).*/\1/p')
+test_if_partitions_continuous_range $tempFoldr/$setsBlock $ncharVar
 
 ########################################################################
 
