@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.06.27.1900"
+VERSION="2017.06.27.2000"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -179,35 +179,28 @@ split_matrix_into_partitions()
     pureMatrx=$(sed -n '/matrix\|MATRIX\|Matrix/{:a;n;/;/b;p;ba}' $2)
     chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $3 | grep 'charset\|CHARSET\|CharSet')
     
-    nexusNew1='\n#NEXUS'
-    # Get section between "#NEXUS" and "MATRIX"
-    nexusNew2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2)
+    nexusNew1='#NEXUS\n\n'
+    nexusNew2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
     nexusNew3='\nMATRIX'
     nexusNew4=';\nEND;\n'
     myCounter=0
     while IFS= read -r line; do 
         myCounter=$((myCounter+1))
-        chrsetFn1=$(printf %03d $myCounter)
-        # Get the gene name, which is the second word per line.
-        chrsetFn2=$(echo "$line" | awk '{print $2}')
-        # Prepend number to the charset name
-        charsetFn=${chrsetFn1}_${chrsetFn2}
-        charrngFn=${charsetFn}_range
-        # Define partition filename
-        partFname=partition_${charsetFn}
+        partitFn1=$(printf %03d $myCounter)
+        partitFn2=$(echo "$line" | awk '{print $2}')
+        partitnFn=partition_${partitFn1}_${partitFn2}
         # Get the info on the charset range
-        echo "$line" | awk '{print $4}' | sed 's/\;//' > $1/$charrngFn
+        charstRng=$(echo "$line" | awk '{print $4}' | sed 's/\;//')
         # Step 1 of assembling the new partition file
-        echo -e "$nexusNew1 $nexusNew2 $nexusNew3" > $1/$partFname
+        echo -e "$nexusNew1$nexusNew2$nexusNew3" > $1/$partitnFn
         # Step 2 of assembling the new partition file: Add the sub-matrix
-        ## LEGACYLINE: #awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' pureMatrx >> $1/$partFname 
-        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' $1/$charrngFn FS=' ' <(echo "$pureMatrx") >> $1/$partFname
+        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' <(echo "$charstRng") FS=' ' <(echo "$pureMatrx") >> $1/$partitnFn
         # Step 3 of assembling the new partition file
-        echo -e "$nexusNew4" >> $1/$partFname
+        echo -e "$nexusNew4" >> $1/$partitnFn
         # Get the length of the sub-matrix
-        NEW_LENGTH=$(awk '{print $2-$1+1}' FS='-' $tempFoldr/$charrngFn)
+        mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charstRng"))
         # Replace the number of characters with the length of the sub-matrix
-        sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$NEW_LENGTH\;/" $1/$partFname
+        sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$mtrxLngth\;/" $1/$partitnFn
     done <<< "$chrsetLns" # Using a here-string
 }
 
