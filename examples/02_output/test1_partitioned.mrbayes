@@ -24,34 +24,46 @@ Victoria_cruziana_KY001813       ATGACTGCAATTTTAGAGAGACGCGAAAGCACAAGCCTATGGGGTCG
 END;
 
 [
-BEGIN SETS;
+begin sets;
+CharSet new1 = 1-35024;
 CharSet psbJ = 35025-35144;
+CharSet new2 = 35145-35258;
 CharSet psbF = 35259-35375;
-END;
+CharSet newFinal = 35376-64655;
+end;
 ]
 
 [
 Best-fitting models identified:
-001_psbJ GTR+I
-002_psbF SYM+I
+001_new1 GTR+I+G
+002_psbJ GTR+I
+003_new2 HKY+I
+004_psbF SYM+I
+005_newFinal GTR+I+G
 ]
 
 begin mrbayes;
 set autoclose=yes;
 set nowarnings=yes;
-CharSet psbJ = 1-35144;
-CharSet psbF = 35145-64655;
-partition combined = 2 : psbJ, psbF; 
+CharSet new1 = 1-35024;
+CharSet psbJ = 35025-35144;
+CharSet new2 = 35145-35258;
+CharSet psbF = 35259-35375;
+CharSet newFinal = 35376-64655;
+partition combined = 5 : new1, psbJ, new2, psbF, newFinal; 
 set partition = combined;
-lset applyto=(1) nst=6 rates=propinv; [# 001_psbJ GTR+I]
-lset applyto=(2) nst=6 rates=propinv; [# 002_psbF SYM+I]
-prset applyto=(2) statefreqpr=fixed(equal); [# 002_psbF SYM+I]
+lset applyto=(1) nst=6 rates=invgamma; [# 001_new1 GTR+I+G]
+lset applyto=(2) nst=6 rates=propinv; [# 002_psbJ GTR+I]
+lset applyto=(3) nst=2 rates=propinv; [# 003_new2 HKY+I]
+lset applyto=(4) nst=6 rates=propinv; [# 004_psbF SYM+I]
+prset applyto=(4) statefreqpr=fixed(equal); [# 004_psbF SYM+I]
+lset applyto=(5) nst=6 rates=invgamma; [# 005_newFinal GTR+I+G]
 prset applyto=(all) ratepr=variable;
 unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);
 mcmcp ngen=20000000 temp=0.1 samplefreq=10000;
 mcmc;
-sump burnin=1000 filen=/home/michael_science/git/michaelgruenstaeudl_PlastidGenomics/09_Nex2PartitionedMrBayes/01_examples/01_input/test1.nex nrun=2;
-sumt burnin=1000 filen=/home/michael_science/git/michaelgruenstaeudl_PlastidGenomics/09_Nex2PartitionedMrBayes/01_examples/01_input/test1.nex nrun=2;
+sump burnin=1000 filen=./examples/01_input/test1.nex nrun=2;
+sumt burnin=1000 filen=./examples/01_input/test1.nex nrun=2;
 end;
 
 quit;
