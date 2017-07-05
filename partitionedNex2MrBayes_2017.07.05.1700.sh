@@ -301,8 +301,6 @@ write_mrbayes_block()
     echo 'prset applyto=(all) ratepr=variable;' >> $2
     echo 'unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);' >> $2
     echo -e 'mcmcp ngen=20000000 temp=0.1 samplefreq=10000;\nmcmc;' >> $2
-    echo -e "sump burnin=1000 filen=$nexusFile nrun=2;" >> $2 # Double quotes are critical here due to variable
-    echo -e "sumt burnin=1000 filen=$nexusFile nrun=2;" >> $2 # Double quotes are critical here due to variable
     echo -e 'end;\n\nquit;' >> $2
 }
 
