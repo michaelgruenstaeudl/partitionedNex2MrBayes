@@ -84,7 +84,7 @@ while getopts :f:m:hv FLAG; do
         ;;
     m)  OPT_B=$OPTARG
         ;;
-    h)  HELP
+    h)  my_help
         ;;
     v)  vrbseBool=1
         ;;
