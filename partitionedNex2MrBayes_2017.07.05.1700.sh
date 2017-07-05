@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.07.03.1700"
+VERSION="2017.07.05.1700"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -26,9 +26,7 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 # PLANNED IMPROVEMENTS IN FUTURE VERSIONS
 
-# (a) The usage of keywords (e.g., "dimensions", "NCHAR", etc.) is case-sensistive. Currently, not all such keywords are coded redundantly so that three different spelling versions (UPPER, lower, FirstLetterUpper) are covered; for example "NCHAR=" is not coded redundantly. In the future it may be advisable to re-write the code such that the NEXUS input files must have all commands in UPPER case. Only sequence names and partition names may be in the case chosen by the user. (But beware: I played around with enforcing that all commands must be in UPPER case before; there are some elements of the code that broke under that condition.)
-
-# (b) An error during modeltesting for a single partition should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
+# (a) An error during modeltesting for a single partition should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
 
 ########################################################################
 
@@ -107,6 +105,35 @@ get_current_time() {
     date '+%Y-%m-%d %H:%M:%S'
 }
 
+reformat_nexus_file()
+#   This function (a) removes comments from a NEXUS file,
+#   (b) removes blank lines (both blank by whitespaces and by tabs), and
+#   (c) standardizes critical command lines (i.e. begin data, begin sets, dimensions, etc.) as lowercase.
+#   INP:  $1: name of complete NEXUS file
+#         $2: name of a reformatted NEXUS file
+#   OUP:  the re-formatted NEXUS file
+{
+    # Delete all info enclosed by square brackets (i.e., NEXUS comments)
+    nexWoCmts=$(sed 's/\[[^]]*\]//g' $1)
+    # Delete all blank lines (both blank by whitespaces and by tabs)
+    nexWoBlkL=$(echo "$nexWoCmts" | sed '/^\s*$/d')
+    # Convert ENTIRE LINES that starts with keyword TO LOWERCASE
+    # keyword1: "begin", line ends with semi-colon
+    #reformKw1=$(echo "$nexWoBlkL" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>/ {$0=tolower($0)} 1')
+    reformKw1=$(echo "$nexWoBlkL" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
+    # keyword2: "end;"
+    reformKw2=$(echo "$reformKw1" | awk 'BEGIN{IGNORECASE=1} /^ *end\;/ {$0=tolower($0)} 1')
+    # keyword3: "matrix"
+    reformKw3=$(echo "$reformKw2" | awk 'BEGIN{IGNORECASE=1} /^ *matrix\>/ {$0=tolower($0)} 1')
+    # keyword4: "dimensions", line ends with semi-colon
+    reformKw4=$(echo "$reformKw3" | awk 'BEGIN{IGNORECASE=1} /^ *dimensions\>.*; *$/ {$0=tolower($0)} 1')
+    # keyword5: "format", line ends with semi-colon
+    reformKw5=$(echo "$reformKw4" | awk 'BEGIN{IGNORECASE=1} /^ *format\>.*; *$/ {$0=tolower($0)} 1')
+    # Convert only SPECIFIC KEYWORD TO LOWERCASE
+    reformKw6=$(echo "$reformKw5" | awk 'tolower($1)=="charset"{$1=tolower($1)}1')
+    echo "$reformKw6" > $2
+}
+
 split_nexus_into_blocks()
 #   This function splits a NEXUS file into individual blocks.
 #   INP:  $1: name of complete NEXUS file
@@ -115,9 +142,9 @@ split_nexus_into_blocks()
 #   OUP:  file with DATA-block
 #         file with SETS-block
 {
-    # Note: A conversion of the NEXUS file to lower case only is not possible, because model matching would not work
-    cat $1 | sed -n '/begin data\;\|BEGIN DATA\;\|Begin Data\;/,/end\;\|END\;\|End\;/p' > $2
-    cat $1 | sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/,/end\;\|END\;\|End\;/p' > $3
+    # Extract the blocks
+    cat $1 | sed -n '/begin data\;/,/end\;/p' > $2
+    cat $1 | sed -n '/begin sets\;/,/end\;/p' > $3
 }
 
 test_if_partitions_overlap()
@@ -126,7 +153,7 @@ test_if_partitions_overlap()
 #   INP:  $1: name of file containing the SETS-block
 #   OUP:  none
 {
-    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
     charstRng=$(echo "$chrsetLns" | awk '{print $4}' | sed 's/\;//')
 
     # Test if any of the charset ranges are overlapping
@@ -147,14 +174,14 @@ test_if_partitions_continuous_range()
 #   OUP:  update of $1
 {
     # Get charset definition lines
-    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $1 | grep 'charset\|CHARSET\|CharSet')
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
     # Convert from discrete to continuous range
-    ##LEGACYCODE: #contRnge1=$(echo "$chrsetLns" | awk -F'[[:space:]]*|-' ' $4-Q>1 {print "CharSet new" ++o " = " Q+1 "-" $4-1 ";" ; Q=$5} 1')
-    ##LEGACYCODE: #contRnge1=$(echo "$chrsetLns" | awk -F'[[:space:]]*|-' '$4-Q+0>=1 {print "CharSet new" ++o " = " Q+1 "-" $4-1 ";" ; Q=$5} {Q=$5; print}')
-    contRnge1=$(echo "$chrsetLns" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "CharSet " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
+    ##LEGACYCODE: #contRnge1=$(echo "$chrsetLns" | awk -F'[[:space:]]*|-' ' $4-Q>1 {print "charset new" ++o " = " Q+1 "-" $4-1 ";" ; Q=$5} 1')
+    ##LEGACYCODE: #contRnge1=$(echo "$chrsetLns" | awk -F'[[:space:]]*|-' '$4-Q+0>=1 {print "charset new" ++o " = " Q+1 "-" $4-1 ";" ; Q=$5} {Q=$5; print}')
+    contRnge1=$(echo "$chrsetLns" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
     # Add concluding partition, if missing
     matrxLngth=$2
-    contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "CharSet newFinal = " $5+1 "-" lngth ";"}')
+    contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
     echo -e "begin sets;\n$contRnge1\n$contRnge2\nend;" > $1
 }
@@ -169,13 +196,13 @@ split_matrix_into_partitions()
 #   OUP:  file with name $charrngFn in temp folder
 #         file with name $partFname in temp folder
 {
-    pureMatrx=$(sed -n '/matrix\|MATRIX\|Matrix/{:a;n;/;/b;p;ba}' $2)
-    chrsetLns=$(sed -n '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/{:a;n;/end\;\|END\;\|End\;/b;p;ba}' $3 | grep 'charset\|CHARSET\|CharSet')
+    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $2)
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $3 | grep 'charset')
     
     nexusNew1='#NEXUS\n\n'
-    nexusNew2=$(sed -e '/matrix\|MATRIX\|Matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
-    nexusNew3='\nMATRIX'
-    nexusNew4=';\nEND;\n'
+    nexusNew2=$(sed -e '/matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
+    nexusNew3='\nmatrix'
+    nexusNew4=';\nend;\n'
     myCounter=0
     while IFS= read -r line; do 
         myCounter=$((myCounter+1))
@@ -193,7 +220,7 @@ split_matrix_into_partitions()
         # Get the length of the sub-matrix
         mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charstRng"))
         # Replace the number of characters with the length of the sub-matrix
-        sed -i "/dimensions\|DIMENSIONS\|Dimensions/ s/NCHAR\=.*\;/NCHAR\=$mtrxLngth\;/" $1/$partitnFn
+        sed -i "/dimensions / s/nchar\=.*\;/nchar\=$mtrxLngth\;/" $1/$partitnFn
     done <<< "$chrsetLns" # Using a here-string
 }
 
@@ -305,6 +332,7 @@ baseName=$(basename $nexusFile) # Using basename to strip off path
 filenStem=${baseName%.nex*} # Using parameter expansion to remove file extension
 
 # Define outfile names
+reformNex=${filenStem}_ReformattedNexus
 dataBlock=${filenStem}_DataBlock
 setsBlock=${filenStem}_SetsBlock
 unspltMtx=${filenStem}_UnsplitMatrix
@@ -325,12 +353,21 @@ mkdir -p $tempFoldr
 
 ########################################################################
 
+## Step 02: Re-formatting NEXUS file
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Step 02: Re-formatting NEXUS file\n"
+fi
+
+reformat_nexus_file $nexusFile $tempFoldr/$reformNex
+
+########################################################################
+
 ## Step 02: Splitting NEXUS file into blocks
 if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 02: Splitting NEXUS file into blocks\n"
 fi
 
-split_nexus_into_blocks $nexusFile $tempFoldr/$dataBlock $tempFoldr/$setsBlock
+split_nexus_into_blocks $tempFoldr/$reformNex $tempFoldr/$dataBlock $tempFoldr/$setsBlock
 
 # Check if dataBlock successfully generated
 if [ ! -s $tempFoldr/$dataBlock ];
@@ -362,7 +399,9 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 04: Confirm that partitions form a continuous range\n"
 fi
 
-ncharVar=$(grep ^DIMENSIONS $tempFoldr/$dataBlock | sed -n 's/.*NCHAR=\([^;]*\).*/\1/p')
+# Extract number of characters in DNA matrix
+ncharVar=$(grep ^dimensions $tempFoldr/$dataBlock | sed -n 's/.*nchar=\([^;]*\).*/\1/p')
+
 test_if_partitions_continuous_range $tempFoldr/$setsBlock $ncharVar
 
 ########################################################################
@@ -440,11 +479,11 @@ if [ $vrbseBool -eq 1 ]; then
 fi
 
 # Extract charsets
-CHARSETS=$(cat $tempFoldr/$setsBlock | grep 'charset\|CharSet\|CHARSET')
+charSetsE=$(cat $tempFoldr/$setsBlock | grep 'charset')
 
 # Replacing the partition names in $lsetSpecs with the line numbers in the charsets
-for file in $(echo "$CHARSETS" | awk '{print $2}'); do # Use doublequote-enclosing around a variable to maintain its newlines!
-lineNumbr=$(echo "$CHARSETS" | awk '/'$file'/{print NR; exit}');
+for file in $(echo "$charSetsE" | awk '{print $2}'); do # Use doublequote-enclosing around a variable to maintain its newlines!
+lineNumbr=$(echo "$charSetsE" | awk '/'$file'/{print NR; exit}');
 sed -i "/$file/ s/applyto\=()/applyto\=($lineNumbr)/" $tempFoldr/$lsetSpecs # Double quotes are critical here due to variable
 done
 
@@ -462,7 +501,7 @@ cat $tempFoldr/$setsBlock >> $outFilenm
 echo -e "]" >> $outFilenm
 
 # Comment out SETS block
-#sed -i '/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/ s/begin sets\;\|BEGIN SETS\;\|Begin Sets\;/[\nbegin sets\;/g' $outFilenm
+#sed -i '/begin sets\;/ s/begin sets\;/[\nbegin sets\;/g' $outFilenm
 #echo -e ']\n' >> $outFilenm
 
 echo -e "\n[\nBest-fitting models identified:\n$bestModls\n]\n" >> $outFilenm
@@ -475,9 +514,9 @@ if [ $vrbseBool -eq 1 ]; then
 fi
 
 # Extract charsets
-CHARSETS=$(cat $tempFoldr/$setsBlock | grep 'charset\|CharSet\|CHARSET')
+charSetsE=$(cat $tempFoldr/$setsBlock | grep 'charset')
 
-write_mrbayes_block $tempFoldr $outFilenm $lsetSpecs "$CHARSETS"
+write_mrbayes_block $tempFoldr $outFilenm $lsetSpecs "$charSetsE"
 
 ########################################################################
 
