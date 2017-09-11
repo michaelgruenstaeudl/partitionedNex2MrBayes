@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.07.05.1700"
+VERSION="2017.09.11.1500"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -26,13 +26,23 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 # PLANNED IMPROVEMENTS IN FUTURE VERSIONS
 
-# (a) An error during modeltesting for a single partition should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
+# (a) The Datablock in the output must not be copied from the input, but must be assembled as interleaved matrices from the individual partitions. The reason for this: MrBayes only accepts lines with 99990 characters, which may be smaller than the complete matrix. Thus, an interleaving is necessary.
+
+#> It looks like the maximum allowed length of a token is defined in the 
+#> source file mb.h.  You might try changing the value in the line:
+#>
+#> #define    CMD_STRING_LENGTH        100000
+#>
+#> to some value higher than the number of characters per line in your 
+#> data set, then recompiling.
+
+# (c) An error during modeltesting for a single partition should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
 
 ########################################################################
 
 # INITIAL SETTINGS
 
-# Toggle on throwing errors
+# Toggle on: throw errors
 set -e
 
 # Evaluate number of cores available on Desktop machine
@@ -106,20 +116,28 @@ get_current_time() {
 }
 
 reformat_nexus_file()
-#   This function (a) removes comments from a NEXUS file,
-#   (b) removes blank lines (both blank by whitespaces and by tabs), and
-#   (c) standardizes critical command lines (i.e. begin data, begin sets, dimensions, etc.) as lowercase.
+#   This function performs the following steps:
+#   (a) it removes comments from a NEXUS file,
+#   (b) it removes blank lines (both blank by whitespaces and by tabs), 
+#   (c) it standardizes critical command lines (i.e. begin data, 
+#       begin sets, dimensions, etc.) as lowercase, and
+#   (d) it removes lines from the sets-block that do not start with the keyword "charset"
 #   INP:  $1: name of complete NEXUS file
 #         $2: name of a reformatted NEXUS file
 #   OUP:  the re-formatted NEXUS file
 {
-    # Delete all info enclosed by square brackets (i.e., NEXUS comments)
+    # Removes comments from a NEXUS file (i.e., delete all info enclosed by square brackets)
     nexWoCmts=$(sed 's/\[[^]]*\]//g' $1)
-    # Delete all blank lines (both blank by whitespaces and by tabs)
+
+    # Removes blank lines (both blank by whitespaces and by tabs)
     nexWoBlkL=$(echo "$nexWoCmts" | sed '/^\s*$/d')
-    # Convert ENTIRE LINES that starts with keyword TO LOWERCASE
+
+    # Standardizes critical command lines as lowercase (i.e., converts 
+    # ENTIRE LINE that starts with a keyword TO LOWERCASE)
+    # NOTE: These conversions to lowercase are critical for the correct 
+    #       section identifikation below.
     # keyword1: "begin", line ends with semi-colon
-    #reformKw1=$(echo "$nexWoBlkL" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>/ {$0=tolower($0)} 1')
+    # NOTE: the following command converts "Begin Data;" to "begin data;", not just "begin"!
     reformKw1=$(echo "$nexWoBlkL" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
     # keyword2: "end;"
     reformKw2=$(echo "$reformKw1" | awk 'BEGIN{IGNORECASE=1} /^ *end\;/ {$0=tolower($0)} 1')
@@ -131,7 +149,23 @@ reformat_nexus_file()
     reformKw5=$(echo "$reformKw4" | awk 'BEGIN{IGNORECASE=1} /^ *format\>.*; *$/ {$0=tolower($0)} 1')
     # Convert only SPECIFIC KEYWORD TO LOWERCASE
     reformKw6=$(echo "$reformKw5" | awk 'tolower($1)=="charset"{$1=tolower($1)}1')
-    echo "$reformKw6" > $2
+
+    # Removes lines from the sets-block that do not start with the keyword "charset"
+    # NOTE: This check must come after the conversion to lowercase chars!
+    # NOTE: This step generates the reformatted NEXUS file
+    echo -e "#NEXUS\n" > $2
+    echo "$reformKw6" | sed -n '/begin data\;/,/end\;/p' >> $2
+    echo "begin sets;" >> $2
+    echo "$reformKw6" | sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' | grep 'charset' >> $2
+    echo "end;" >> $2
+
+    # Check that datatype is "DNA|dna"
+    # NOTE: This check must come after the conversion to lowercase chars!
+    dataTypeB=$(cat $2 | grep format | sed -n 's/.*datatype=\([^ ]*\).*/\1/p') # Extract info on datatype
+    if [ ! "$dataTypeB" = "dna" ]; then
+        echo -ne " ERROR | $(get_current_time) | Datatype not set as: DNA\n"
+        exit 1
+    fi
 }
 
 split_nexus_into_blocks()
@@ -164,7 +198,7 @@ test_if_partitions_overlap()
     fi
 }
 
-test_if_partitions_continuous_range()
+ensure_partitions_form_continuous_range()
 #   This function tests if the partitions form a continuous range. 
 #   If the partitions don't form such a continuous range, additional
 #   ranges are inserted such that all ranges taken together form a 
@@ -183,7 +217,10 @@ test_if_partitions_continuous_range()
     matrxLngth=$2
     contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
-    echo -e "begin sets;\n$contRnge1\n$contRnge2\nend;" > $1
+    echo "begin sets;" > $1
+    echo "$contRnge1" >> $1
+    echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
+    echo "end;" >> $1
 }
 
 split_matrix_into_partitions()
@@ -306,7 +343,7 @@ write_mrbayes_block()
 
 ########################################################################
 
-## Step 01: Checking infiles
+## STEP 01: CHECKING INFILES
 if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 01: Checking infiles\n"
 fi
@@ -351,7 +388,7 @@ mkdir -p $tempFoldr
 
 ########################################################################
 
-## Step 02: Re-formatting NEXUS file
+## STEP 02: RE-FORMATTING NEXUS FILE
 if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 02: Re-formatting NEXUS file\n"
 fi
@@ -360,9 +397,9 @@ reformat_nexus_file $nexusFile $tempFoldr/$reformNex
 
 ########################################################################
 
-## Step 02: Splitting NEXUS file into blocks
+## STEP 03: SPLITTING NEXUS FILE INTO BLOCKS
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 02: Splitting NEXUS file into blocks\n"
+    echo -ne " INFO  | $(get_current_time) | Step 03: Splitting NEXUS file into blocks\n"
 fi
 
 split_nexus_into_blocks $tempFoldr/$reformNex $tempFoldr/$dataBlock $tempFoldr/$setsBlock
@@ -383,39 +420,39 @@ fi
 
 ########################################################################
 
-## Step 03: Confirm that partitions do not overlap
+## STEP 04: CONFIRM THAT PARTITIONS DO NOT OVERLAP
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 03: Confirm that partitions do not overlap\n"
+    echo -ne " INFO  | $(get_current_time) | Step 04: Confirm that partitions do not overlap\n"
 fi
 
 test_if_partitions_overlap $tempFoldr/$setsBlock
 
 ########################################################################
 
-## Step 04: Confirm that partitions form a continuous range
+## STEP 05: ENSURE THAT PARTITIONS FORM A CONTINUOUS RANGE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 04: Confirm that partitions form a continuous range\n"
+    echo -ne " INFO  | $(get_current_time) | Step 05: Confirm that partitions form a continuous range\n"
 fi
 
 # Extract number of characters in DNA matrix
 ncharVar=$(grep ^dimensions $tempFoldr/$dataBlock | sed -n 's/.*nchar=\([^;]*\).*/\1/p')
 
-test_if_partitions_continuous_range $tempFoldr/$setsBlock $ncharVar
+ensure_partitions_form_continuous_range $tempFoldr/$setsBlock $ncharVar
 
 ########################################################################
 
-## Step 05: Splitting matrix into partitions
+## STEP 06: SPLITTING MATRIX INTO PARTITIONS
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 05: Splitting matrix into partitions\n"
+    echo -ne " INFO  | $(get_current_time) | Step 06: Splitting matrix into partitions\n"
 fi
 
 split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$setsBlock
 
 ########################################################################
 
-## Step 06: Conducting modeltesting via jModelTest2
+## STEP 07: CONDUCTING MODELTESTING VIA JMODELTEST2
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 06: Conducting modeltesting via jModelTest2\n"
+    echo -ne " INFO  | $(get_current_time) | Step 07: Conducting modeltesting via jModelTest2\n"
 fi
 
 count=`ls -1 $tempFoldr/partition_* 2>/dev/null | wc -l`
@@ -431,9 +468,9 @@ fi
 
 ########################################################################
 
-## Step 07: Extracting model information from jModelTest2
+## STEP 08: EXTRACTING MODEL INFORMATION FROM JMODELTEST2
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 07: Extracting model information from jModelTest2\n"
+    echo -ne " INFO  | $(get_current_time) | Step 08: Extracting model information from jModelTest2\n"
 fi
 
 count=`ls -1 $tempFoldr/*.bestModel 2>/dev/null | wc -l`
@@ -450,9 +487,9 @@ fi
 
 ########################################################################
 
-## Step 08: Converting modeltest results to lset specs for MrBayes
+## STEP 09: CONVERTING MODELTEST RESULTS TO LSET SPECS FOR MRBAYES
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 08: Converting modeltest results to lset specs for MrBayes\n"
+    echo -ne " INFO  | $(get_current_time) | Step 09: Converting modeltest results to lset specs for MrBayes\n"
 fi
 
 if [[ ! -f $tempFoldr/$mdlOvervw ]];
@@ -471,9 +508,9 @@ convert_models_into_lset $tempFoldr $lsetSpecs
 
 ########################################################################
 
-## Step 09: Replacing partition names with partition numbers (This is why ordered partitions are CRITICAL!)
+## STEP 10: REPLACING PARTITION NAMES WITH PARTITION NUMBERS (THIS IS WHY ORDERED PARTITIONS ARE CRITICAL!)
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 09: Replacing partition names with partition numbers\n"
+    echo -ne " INFO  | $(get_current_time) | Step 10: Replacing partition names with partition numbers\n"
 fi
 
 # Extract charsets
@@ -487,28 +524,42 @@ done
 
 ########################################################################
 
-## Step 10: Assembling output file
+## STEP 11: ASSEMBLING OUTPUT FILE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 10: Assembling output file\n"
+    echo -ne " INFO  | $(get_current_time) | Step 11: Assembling output file\n"
 fi
 
 echo -e "#NEXUS\n" > $outFilenm
-cat $tempFoldr/$dataBlock >> $outFilenm
-echo -e "\n[" >> $outFilenm # SETS-block is commented out
+
+# Append dimension and format info of DATA-block
+cat $tempFoldr/$dataBlock | sed -n '/begin data\;/,/matrix/p' >> $outFilenm
+
+# Specify that matrix is interleaved
+sed -i '/format/ s/\;/ interleave\=yes\;/' $outFilenm # in-line replacement of semi-colon with interleave-info plus semi-colon, if line has keyword 'format'
+
+# Append the individual partitions
+for p in $(ls $tempFoldr/partition_* | grep -v bestModel); do
+  echo -ne "\n[$(basename $p)]\n" >> $outFilenm
+  pureMatrx=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
+  algnMatrx=$(column -t $pureMatrx)
+  echo "$algnMatrx" >> $outFilenm # Append only the matrix of a partition, not the preceeding dimension and format info; also, don't append the closing ';\nend;' per partition
+done
+
+# Append a closing ';\nend;'
+echo -e "\n;\nend;" >> $outFilenm
+
+# Append the SETS-block, which is commented out
+echo -e "\n[" >> $outFilenm
 cat $tempFoldr/$setsBlock >> $outFilenm
 echo -e "]" >> $outFilenm
-
-# Comment out SETS block
-#sed -i '/begin sets\;/ s/begin sets\;/[\nbegin sets\;/g' $outFilenm
-#echo -e ']\n' >> $outFilenm
 
 echo -e "\n[\nBest-fitting models identified:\n$bestModls\n]\n" >> $outFilenm
 
 ########################################################################
 
-## Step 11: Generating MrBayes block
+## STEP 12: GENERATING MRBAYES BLOCK
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 11: Generating MrBayes block\n"
+    echo -ne " INFO  | $(get_current_time) | Step 12: Generating MrBayes block\n"
 fi
 
 # Extract charsets
@@ -518,9 +569,9 @@ write_mrbayes_block $tempFoldr $outFilenm $lsetSpecs "$charSetsE"
 
 ########################################################################
 
-## Step 12: Cleaning up the work directory
+## STEP 13: CLEANING UP THE WORK DIRECTORY
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 12: Cleaning up\\n"
+    echo -ne " INFO  | $(get_current_time) | Step 13: Cleaning up\\n"
 fi
 
 rm -r $tempFoldr
