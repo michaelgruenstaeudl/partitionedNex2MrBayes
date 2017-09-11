@@ -541,7 +541,7 @@ sed -i '/format/ s/\;/ interleave\=yes\;/' $outFilenm # in-line replacement of s
 for p in $(ls $tempFoldr/partition_* | grep -v bestModel); do
   echo -ne "\n[$(basename $p)]\n" >> $outFilenm
   pureMatrx=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
-  algnMatrx=$(column -t $pureMatrx)
+  algnMatrx=$(echo "$pureMatrx" | column -t)
   echo "$algnMatrx" >> $outFilenm # Append only the matrix of a partition, not the preceeding dimension and format info; also, don't append the closing ';\nend;' per partition
 done
 
