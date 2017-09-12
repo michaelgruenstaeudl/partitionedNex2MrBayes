@@ -7,7 +7,7 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.09.11.1500"
+VERSION="2017.09.12.1300"
 USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 ########################################################################
@@ -26,7 +26,13 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 
 # PLANNED IMPROVEMENTS IN FUTURE VERSIONS
 
-# (a) The Datablock in the output must not be copied from the input, but must be assembled as interleaved matrices from the individual partitions. The reason for this: MrBayes only accepts lines with 99990 characters, which may be smaller than the complete matrix. Thus, an interleaving is necessary.
+
+########################################################################
+
+# NEW FEATURES:
+
+# (a) Output now displays interleaved matrix.
+# ORIGINAL PROBLEM: The Datablock in the output must not be copied from the input, but must be assembled as interleaved matrices from the individual partitions. The reason for this: MrBayes only accepts lines with 99990 characters, which may be smaller than the complete matrix. Thus, an interleaving is necessary.
 
 #> It looks like the maximum allowed length of a token is defined in the 
 #> source file mb.h.  You might try changing the value in the line:
@@ -36,7 +42,8 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 #> to some value higher than the number of characters per line in your 
 #> data set, then recompiling.
 
-# (c) An error during modeltesting for a single partition should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
+# (b) If an error during modeltesting for a single partition occurs (or the model is not correctly parsed), the code simply assigns a general model (GTR+I+G) to said partition.
+# ORIGINAL PROBLEM: If an error during modeltesting for a single partition occurs, it should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
 
 ########################################################################
 
@@ -45,12 +52,8 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltest.jar>"
 # Toggle on: throw errors
 set -e
 
-# Evaluate number of cores available on Desktop machine
-nmbrCores=$(grep -c ^processor /proc/cpuinfo)
-posIntgr='^[0-9]+$'
-if ! [[ $nmbrCores =~ $re ]]; then
-    nmbrCores=1
-fi
+# Start timing execution time
+exec_time_start=$(date +%s)
 
 # Initialize variables to default values
 OPT_A="file path to, and name of, the NEXUS file"
@@ -112,7 +115,7 @@ shift $((OPTIND-1))
 # FUNCTIONS
 
 get_current_time() {
-    date '+%Y-%m-%d %H:%M:%S'
+    date '+%Y-%m-%d %Z %H:%M:%S'
 }
 
 reformat_nexus_file()
@@ -155,7 +158,7 @@ reformat_nexus_file()
     # NOTE: This step generates the reformatted NEXUS file
     echo -e "#NEXUS\n" > $2
     echo "$reformKw6" | sed -n '/begin data\;/,/end\;/p' >> $2
-    echo "begin sets;" >> $2
+    echo -e "\nbegin sets;" >> $2
     echo "$reformKw6" | sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' | grep 'charset' >> $2
     echo "end;" >> $2
 
@@ -219,7 +222,8 @@ ensure_partitions_form_continuous_range()
     # Update SETS-block
     echo "begin sets;" > $1
     echo "$contRnge1" >> $1
-    echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
+    #echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
+    echo "$contRnge2" >> $1
     echo "end;" >> $1
 }
 
@@ -343,6 +347,26 @@ write_mrbayes_block()
 
 ########################################################################
 
+## STEP 00: CHECKING SYSTEM AND BASH SHELL
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Step 00: Evaluate system and bash shell\n"
+fi
+
+# Evaluate number of cores available
+nmbrCores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null) # The "||" indicates that if "nproc" fails, do "grep ^processor /proc/cpuinfo".
+posIntgr='^[0-9]+$'
+if ! [[ $nmbrCores =~ $posIntgr ]]; then
+    nmbrCores=1
+fi
+
+# Print system details to log
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $nmbrCores\n"
+    echo -ne " INFO  | $(get_current_time) | Bash info: $(bash --version | head -n1 2>/dev/null)\n"
+fi
+
+########################################################################
+
 ## STEP 01: CHECKING INFILES
 if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 01: Checking infiles\n"
@@ -367,7 +391,7 @@ baseName=$(basename $nexusFile) # Using basename to strip off path
 filenStem=${baseName%.nex*} # Using parameter expansion to remove file extension
 
 # Define outfile names
-reformNex=${filenStem}_ReformattedNexus
+reformNex=${filenStem}_ReformattedInputFile
 dataBlock=${filenStem}_DataBlock
 setsBlock=${filenStem}_SetsBlock
 unspltMtx=${filenStem}_UnsplitMatrix
@@ -388,9 +412,9 @@ mkdir -p $tempFoldr
 
 ########################################################################
 
-## STEP 02: RE-FORMATTING NEXUS FILE
+## STEP 02: RE-FORMATTING INPUT NEXUS FILE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 02: Re-formatting NEXUS file\n"
+    echo -ne " INFO  | $(get_current_time) | Step 02: Re-formatting input NEXUS file\n"
 fi
 
 reformat_nexus_file $nexusFile $tempFoldr/$reformNex
@@ -422,7 +446,7 @@ fi
 
 ## STEP 04: CONFIRM THAT PARTITIONS DO NOT OVERLAP
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 04: Confirm that partitions do not overlap\n"
+    echo -ne " INFO  | $(get_current_time) | Step 04: Confirming that partitions do not overlap\n"
 fi
 
 test_if_partitions_overlap $tempFoldr/$setsBlock
@@ -431,7 +455,7 @@ test_if_partitions_overlap $tempFoldr/$setsBlock
 
 ## STEP 05: ENSURE THAT PARTITIONS FORM A CONTINUOUS RANGE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 05: Confirm that partitions form a continuous range\n"
+    echo -ne " INFO  | $(get_current_time) | Step 05: Ensuring that partitions form a continuous range\n"
 fi
 
 # Extract number of characters in DNA matrix
@@ -455,11 +479,21 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 07: Conducting modeltesting via jModelTest2\n"
 fi
 
-count=`ls -1 $tempFoldr/partition_* 2>/dev/null | wc -l`
+#count=`ls -1 $tempFoldr/partition_* 2>/dev/null | wc -l`
+count=$(ls -1 $tempFoldr/partition_* 2>/dev/null | wc -l)
 if [[ $count != 0 ]];
 then
     for file in ./$tempFoldr/partition_*; do 
-    java -jar $mdltstBin -tr $nmbrCores -d "$file" -g 4 -i -f -AIC -o ${file}.bestModel 1>${file}.bestModel.log 2>&1
+    # java -jar $mdltstBin -tr $nmbrCores -d "$file" -f -i -g 4 -AIC -o ${file}.bestModel
+    java -jar $mdltstBin -d "$file" -f -i -g 4 -AIC -o ${file}.bestModel 1>${file}.bestModel.log 2>&1
+    # NOTE: By default, the total number of cores in the machine is used by jModelTest (see p. 11 of jModelTest 2 Manual v0.1.10).
+    # JMODELTEST OPTIONS SELECTED:
+    # -d sequenceFileName
+    # -f include models with unequals base frecuencies
+    # -i include models with a proportion invariable sites
+    # -AIC calculate the Akaike Information Criterion
+    # -g numberOfCategories: include models with rate variation among sites and number of categories
+    # -tr numberOfThreads  # NOTE: By default, the total number of cores in the machine is used by jModelTest (see p. 11 of jModelTest 2 Manual v0.1.10).
     done
 else
     echo -ne " ERROR | $(get_current_time) | No partition files (partition_*) found.\n"
@@ -473,12 +507,20 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Step 08: Extracting model information from jModelTest2\n"
 fi
 
-count=`ls -1 $tempFoldr/*.bestModel 2>/dev/null | wc -l`
+#count=`ls -1 $tempFoldr/*.bestModel 2>/dev/null | wc -l`
+count=$(ls -1 $tempFoldr/*.bestModel 2>/dev/null | wc -l)
 if [[ $count != 0 ]];
 then
     for file in ./$tempFoldr/*.bestModel; do 
-    echo -ne "$file" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $tempFoldr/$mdlOvervw
-    cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed 's/Model = //g' | sed 's/   / /g' >> $tempFoldr/$mdlOvervw  # Have to use command ´cat´, cannot use ´echo´ here; not sure why.
+        echo -ne "$file" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $tempFoldr/$mdlOvervw
+        #LEGACYCODE: bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed 's/Model = //g' | sed 's/   / /g') # Parse best model from jModeltest output
+        bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed -n 's/.*Model \= \([^ ]*\).*/\1/p' 2>/dev/null) # Parse best model from jModeltest output
+        if [[ ! -z "$bestModel" ]];
+        then
+            echo " $bestModel" >> $tempFoldr/$mdlOvervw  # NOTE: model has to be preceeded by one space!
+        else
+            echo " GTR+I+G" >> $tempFoldr/$mdlOvervw  # If error in modeltesting or parsing, set GTR+I+G as standard model
+        fi
     done
 else
     echo -ne " ERROR | $(get_current_time) | No result files of the modeltesting (*.bestModel) found.\n"
@@ -526,7 +568,7 @@ done
 
 ## STEP 11: ASSEMBLING OUTPUT FILE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 11: Assembling output file\n"
+    echo -ne " INFO  | $(get_current_time) | Step 11: Assembling partitions into output file\n"
 fi
 
 echo -e "#NEXUS\n" > $outFilenm
@@ -576,9 +618,13 @@ fi
 
 rm -r $tempFoldr
 
+# Stop timing execution time
+exec_time_dur=$((($(date +%s)-$exec_time_start)/60))
+exec_time_dur_prettyp=$(printf "%.2f minutes\n" $exec_time_dur)
+
 # End of file message
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Processing complete for: $nexusFile\n"
+    echo -ne " INFO  | $(get_current_time) | Processing complete for: $nexusFile; Execution time: $exec_time_dur_prettyp\n"
 fi
 
 # Exit without mistakes
