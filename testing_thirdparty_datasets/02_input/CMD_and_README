@@ -1,0 +1,21 @@
+#########
+# FIRST #
+#########
+
+input=Leache_etal_2015.nex
+
+# 1. Comment out the partitions starting with "genome" by Rob Lanfear, as they describe the entire genome unpartitioned.
+# Do this via a sed-script targeted against keyword "CHARSET \+ genome", so that everybody can follow it.
+cat $input | awk '{ if ($0~/CHARSET/ && $0~/genome/) print $0="["$0"]"; else print $0;}' > tmp
+
+# 2. Replace the datatype "nucleotide", which is not know to mrbayes, with the datatype "dna".
+sed -i "/format / s/datatype\=nucleotide /datatype\=dna /" tmp
+
+mv $input ${input}.bak
+mv tmp $input
+
+
+##########
+# SECOND #
+##########
+bash /home/michael_science/git/michaelgruenstaeudl_partitionedNex2MrBayes/partitionedNex2MrBayes_2017.09.11.1600.sh -f Leache_etal_2015.nex -m ~/binaries/jModelTest_2.1.7/jModelTest.jar -v > Leache_etal_2015__partitionedNex2MrBayes.log
