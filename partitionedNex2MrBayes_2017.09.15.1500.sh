@@ -7,59 +7,42 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.09.14.1600"
-USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -m <path_to_modeltesting_tool> -t <type_of_modeltesting_tool>"
+VERSION="2017.09.15.1500"
+USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -t <type_of_modeltesting_tool> -b <path_to_modeltesting_tool> -o <path_to_outfile>"
 
 ########################################################################
 
 #    The script converts a DNA alignment in NEXUS format that contains character set ("charset") definitions into a partitioned NEXUS file ready for analysis with MrBayes. The character sets (hereafter "partitions") are hereby extracted, passed to modeltesting with one of two different modeltesting software tools (jModelTest or PartitionFinder2) to identify the best-fitting model of nucleotide substitition and then concatenated again. Where necessary, the best-fitting nucleotide substitution models are converted to the specifications read by MrBayes. A command block for MrBayes is appended to the NEXUS file that integrates these partition definitions.
-
 #    Several tests regarding the character set definitions are performed during the execution of the script. First, the script evaluates if the entire alignment is covered by partitions. If not, additional partitions are defined so that all partitions together form a continuous range from {1} to {total size of matrix}. Second, the script evaluates if any of the character definitions overlap with one another. If an overlap is detected, the script exists with an error. Consequently, the initial character set definitions of the NEXUS file do not need to cover the entire alignment length, but must not be overlapping.
-
 #    ARGS:
-#        NEXUS file:    file path to, and name of, the NEXUS file
-#        MODELTESTING tool: file path to, and name of, the modeltesting software tool
-#        modeltesting TYPE: name of modeltesting software tool (available: jmodeltest, partitionfinder2)
+#        input file:        file path to, and name of, the NEXUS input file
+#        modeltesting type: name of modeltesting tool used (available: jmodeltest, partitionfinder2)
+#        modeltesting tool: file path to, and name of, the modeltesting binary or script
+#        output file:       file path to, and name of, the output file
 #    OUTP:
-#        MRBAYES file:  a NEXUS file ready for analysis with MrBayes
+#        MRBAYES file:      a NEXUS file ready for analysis with MrBayes
 
 ########################################################################
 
-# PLANNED IMPROVEMENTS IN FUTURE VERSIONS
-
-
-########################################################################
-
-# NEW FEATURES:
-
-# (a) Output now displays interleaved matrix.
-# ORIGINAL PROBLEM: The Datablock in the output must not be copied from the input, but must be assembled as interleaved matrices from the individual partitions. The reason for this: MrBayes only accepts lines with 99990 characters, which may be smaller than the complete matrix. Thus, an interleaving is necessary.
-
-#> It looks like the maximum allowed length of a token is defined in the 
-#> source file mb.h.  You might try changing the value in the line:
-#>
-#> #define    CMD_STRING_LENGTH        100000
-#>
-#> to some value higher than the number of characters per line in your 
-#> data set, then recompiling.
-
-# (b) If an error during modeltesting for a single partition occurs (or the model is not correctly parsed), the code simply assigns a general model (GTR+I+G) to said partition.
-# ORIGINAL PROBLEM: If an error during modeltesting for a single partition occurs, it should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
+# TO DO:
+# [currently nothing]
 
 ########################################################################
 
-# INITIAL SETTINGS
+# INITIAL SETTINGS AND COMMANDLINE INTERFACE
 
 # Toggle on: throw errors
 set -e
 
 # Start timing execution time
-totalrun_time_start=$(date +%s)
-totalrun_time_start_prettyp=$(date '+%Y.%m.%d.%H%M')
+runtime_start=$(date +%s)
+runtime_start_pp=$(date '+%Y.%m.%d.%H%M')
 
 # Initialize variables to default values
-OPT_A="file path to, and name of, the NEXUS file"
-OPT_B="file path to, and name of, the jModelTest jar file"
+OPT_A="file path to, and name of, the NEXUS input file"
+OPT_B="name of modeltesting software tool (available: jmodeltest, partitionfinder2)"
+OPT_C="file path to, and name of, the modeltesting binary or script"
+OPT_D="file path to, and name of, the output file"
 keepBool=0
 vrbseBool=0
 
@@ -75,8 +58,9 @@ function my_help {
     echo -e "${REV}Usage:${NORM} $USAGE"\\n
     echo "Mandatory command line switches:"
     echo "${REV}-f${NORM}  --Sets file path to, and name of, ${BOLD}NEXUS file${NORM}. No default exists."
-    echo "${REV}-m${NORM}  --Sets file path to, and name of, ${BOLD}modeltesting software tool${NORM}. No default exists."
     echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of modeltesting software tool (available: jmodeltest, partitionfinder2). No default exists."
+    echo "${REV}-b${NORM}  --Sets file path to, and name of, the modeltesting${BOLD}binary or script${NORM}. No default exists."
+    echo "${REV}-o${NORM}  --Sets file path to, and name of, ${BOLD}output file${NORM}. No default exists."
     echo "Optional command line switches:"
     echo "${REV}-k${NORM}  --${BOLD}Keeps${NORM} temporary files. Default is ${BOLD}off${NORM}."
     echo "${REV}-v${NORM}  --Displays ${BOLD}verbose${NORM} status messages. Default is ${BOLD}off${NORM}."
@@ -94,13 +78,15 @@ fi
 
 # GETOPTS CODE
 
-while getopts :f:m:t:hkv FLAG; do
+while getopts :f:t:b:o:hkv FLAG; do
   case $FLAG in
     f)  OPT_A=$OPTARG
         ;;
-    m)  OPT_B=$OPTARG
+    t)  OPT_B=$OPTARG
         ;;
-    t)  OPT_C=$OPTARG
+    b)  OPT_C=$OPTARG
+        ;;
+    o)  OPT_D=$OPTARG
         ;;
     h)  my_help
         ;;
@@ -122,10 +108,95 @@ shift $((OPTIND-1))
 ########################################################################
 ########################################################################
 
-# FUNCTIONS
+# GENERAL FUNCTIONS
 
 get_current_time() {
     date '+%Y-%m-%d %Z %H:%M:%S'
+}
+
+check_inp_outp_availability()
+#   This function checks the availability of input and output files.
+#   INP:  $1: path and name of input: NEXUS file ($nexusFile)
+#         $1: path and name of input: modeltest binary/script ($mdltstBin)
+#         $3: path and name of output file ($outFilenm)
+#   OUP:  none
+{
+    # Checking if input files exists
+    #if [[ ! -f $1 ]]; then 
+    if [ ! -f $1 ]; then 
+        echo -ne " ERROR | $(get_current_time) | Input file not found: $1\n"
+        exit 1
+    fi
+    #if [[ ! -f $2 ]]; then 
+    if [ ! -f $2 ]; then 
+        echo -ne " ERROR | $(get_current_time) | Input file not found: $2\n"
+        exit 1
+    fi
+    # Check if outfile already exists
+    #if [[ $3 = /* ]]; then # File is generated by GETOPTS, so checking its presence is not useful
+    if [ -f $3 ]; then
+        echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $3\n"
+        exit 1
+    fi
+}
+
+ensure_partitions_form_continuous_range()
+#   This function tests if the partitions form a continuous range. 
+#   If the partitions don't form such a continuous range, additional
+#   ranges are inserted such that all ranges taken together form a 
+#   continuous range from {1} to {total size of matrix}.
+#   INP:  $1: name of file containing the SETS-block
+#         $2: total size of matrix
+#   OUP:  update of $1
+{
+    # Get charset definition lines
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
+    # Convert from discrete to continuous range
+    contRnge1=$(echo "$chrsetLns" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
+    # Add concluding partition, if missing
+    matrxLngth=$2
+    contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
+    # Update SETS-block
+    echo "begin sets;" > $1
+    echo "$contRnge1" >> $1
+    #echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
+    echo "$contRnge2" >> $1
+    echo "end;" >> $1
+}
+
+get_num_of_avail_cores()
+#   This function evaluates the numberof available cores on a system
+#   INP:  none
+#   OUP:  returns integer
+{
+    nmbrCores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null)  # NOTE: The "||" indicates that if "nproc" fails, do "grep ^processor /proc/cpuinfo".
+    posIntgr='^[0-9]+$'
+    if ! [[ $nmbrCores =~ $posIntgr ]]; then
+        nmbrCores=1
+    fi
+    echo $nmbrCores
+}
+
+reconstitute_datablock_as_interleaved()
+#   This function reconstitutes a data block from individual partitions, but makes the data block interleaved.
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of DATA-block ($dataBlock)
+#         $3: name of outfile ($outFilenm)
+#   OUP:  none; writes to outfile
+{
+    # Step 1: Append dimension and format info of DATA-block
+    cat $1/$2 | sed -n '/begin data\;/,/matrix/p' >> $3
+    # Step 2: Specify that matrix is interleaved
+    sed -i '/format/ s/\;/ interleave\=yes\;/' $3 # in-line replacement of semi-colon with interleave-info plus semi-colon, if line has keyword 'format'
+    # Step 3: Append the individual partitions
+    for p in $(ls $1/partition_* | grep -v bestModel); do
+        echo -ne "\n[$(basename $p)]\n" >> $3
+        pureMatrx=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
+        algnMatrx=$(echo "$pureMatrx" | column -t)
+        echo "$algnMatrx" >> $3 # Append only the matrix of a partition, not the preceeding dimension and format info; also, don't append the closing ';\nend;' per partition
+    done
+    # Step 4: Append a closing ';\nend;'
+    echo -e "\n;\nend;" >> $3
 }
 
 reformat_nexus_file()
@@ -177,6 +248,114 @@ reformat_nexus_file()
     fi
 }
 
+split_matrix_into_partitions()
+#   This function takes the matrix of a NEXUS file and extracts from it a 
+#   character range (hereafter "sub-matrix") specified by the definition 
+#   of a charsets line.
+#   INP:  $1: path to temp folder
+#         $2: name of file containing the DATA-block
+#         $3: name of file containing the SETS-block
+#   OUP:  file with name $charrngFn in temp folder
+#         file with name $partFname in temp folder
+{
+    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $2)
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $3 | grep 'charset')
+    nexusNew1='#NEXUS\n\n'
+    nexusNew2=$(sed -e '/matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
+    nexusNew3='\nmatrix'
+    nexusNew4=';\nend;\n'
+    myCounter=0
+    while IFS= read -r line; do 
+        myCounter=$((myCounter+1))
+        partitFn1=$(printf %03d $myCounter)
+        partitFn2=$(echo "$line" | awk '{print $2}')
+        partitnFn=partition_${partitFn1}_${partitFn2}
+        # Get the info on the charset range
+        charstRng=$(echo "$line" | awk '{print $4}' | sed 's/\;//')
+        # Step 1 of assembling the new partition file
+        echo -e "$nexusNew1$nexusNew2$nexusNew3" > $1/$partitnFn
+        # Step 2 of assembling the new partition file: Add the sub-matrix
+        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' <(echo "$charstRng") FS=' ' <(echo "$pureMatrx") >> $1/$partitnFn
+        # Step 3 of assembling the new partition file
+        echo -e "$nexusNew4" >> $1/$partitnFn
+        # Get the length of the sub-matrix
+        mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charstRng"))
+        # Replace the number of characters with the length of the sub-matrix
+        sed -i "/dimensions / s/nchar\=.*\;/nchar\=$mtrxLngth\;/" $1/$partitnFn
+    done <<< "$chrsetLns" # Using a here-string
+}
+
+split_nexus_into_blocks()
+#   This function splits a NEXUS file into individual blocks.
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of reformatted NEXUS file ($reformNex)
+#         $3: name of file containing the extracted DATA-block ($dataBlock)
+#         $4: name of file containing the extracted SETS-block ($setsBlock)
+#   OUP:  file with DATA-block
+#         file with SETS-block
+{
+    # Extract the blocks
+    cat $1/$2 | sed -n '/begin data\;/,/end\;/p' > $1/$3
+    cat $1/$2 | sed -n '/begin sets\;/,/end\;/p' > $1/$4
+    
+    # Check if dataBlock successfully generated
+    if [ ! -s "$1/$3" ];
+    then
+        echo -ne " ERROR | $(get_current_time) | No file size: $1/$3\n"
+        exit 1
+    fi
+    # Check if setsBlock successfully generated
+    if [ ! -s "$1/$4" ];
+    then
+        echo -ne " ERROR | $(get_current_time) | No file size: $1/$4\n"
+        exit 1
+    fi
+}
+
+test_if_partitions_overlap()
+#   This function tests if any of the partitions (i.e., charset ranges)
+#   overlap. If they do, an error is thrown.
+#   INP:  $1: name of file containing the SETS-block
+#   OUP:  none
+{
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
+    charstRng=$(echo "$chrsetLns" | awk '{print $4}' | sed 's/\;//')
+    # Test if any of the charset ranges are overlapping
+    charstOlp=$(echo "$charstRng" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
+    if [ ! "$charstOlp" = "" ]; then 
+        echo -ne " ERROR | $(get_current_time) | Charset range overlaps with subsequent range: $charstOlp\n"
+        exit 1
+    fi
+}
+
+########################################################################
+########################################################################
+
+# FUNCTIONS SPECIFIC TO 'JMODELTEST'
+
+assemble_mrbayes_block_from_jmodeltest()
+#   This function appends a MrBayes block to a file ($outFilenm).
+#   INP:  $1: path to temp folder
+#         $2: name of outfile
+#         $3: name of lset definitions file
+#         $4: charsets variable
+#   OUP:  none; operates on lset definitions file
+{
+    echo -e 'begin mrbayes;' >> $2
+    echo -e 'set autoclose=yes;' >> $2
+    echo -e 'set nowarnings=yes;' >> $2
+    echo "$4" >> $2
+    echo -n 'partition combined =' $(echo "$4" | wc -l) ': ' >> $2 # Line must not end with linebreak, thus -n
+    echo "$4" | awk '{print $2}' | awk '{ORS=", "; print; }' >> $2
+    sed -i 's/\(.*\)\,/\1;/' $2 # Replace final comma with semi-colon; don't make this replacement global
+    echo -e '\nset partition = combined;' >> $2 # Option -e means that \n generates new line
+    cat $1/$3 >> $2
+    echo 'prset applyto=(all) ratepr=variable;' >> $2
+    echo 'unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);' >> $2
+    echo -e '[mcmcp ngen=20000000 temp=0.1 samplefreq=10000;mcmc;]' >> $2
+    echo -e 'end;\n' >> $2
+}
+
 convert_models_into_lset()
 #   This function converts the names of nucleotide substitution models 
 #   into lset definitions readable by MrBayes.
@@ -191,6 +370,12 @@ convert_models_into_lset()
 #           position precludes that string `GTR+I+G` would be replaced by 
 #           `GTR+I`.
 {
+    if [ ! -f $1/$2 ];
+    then 
+        echo -ne " ERROR | $(get_current_time) | File not found: $1/$2\n"
+        exit 1
+    fi
+    
     # Step 1: Copy best-models file as lset definitions file while adding a comment sign to each line
     cp $1/$2 $1/$3
     awk -F'/' '{print "[# "$NF}' $1/$2 > $1/$3
@@ -250,30 +435,6 @@ convert_models_into_lset()
     done
 }
 
-ensure_partitions_form_continuous_range()
-#   This function tests if the partitions form a continuous range. 
-#   If the partitions don't form such a continuous range, additional
-#   ranges are inserted such that all ranges taken together form a 
-#   continuous range from {1} to {total size of matrix}.
-#   INP:  $1: name of file containing the SETS-block
-#         $2: total size of matrix
-#   OUP:  update of $1
-{
-    # Get charset definition lines
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
-    # Convert from discrete to continuous range
-    contRnge1=$(echo "$chrsetLns" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
-    # Add concluding partition, if missing
-    matrxLngth=$2
-    contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
-    # Update SETS-block
-    echo "begin sets;" > $1
-    echo "$contRnge1" >> $1
-    #echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
-    echo "$contRnge2" >> $1
-    echo "end;" >> $1
-}
-
 extract_modelinfo_from_jmodeltest()
 #   This function extracts modelinfo from the output of jModeltest; the output was saved into logfiles ending with the name ".bestModel"
 #   INP:  $1: path to temp folder ($tempFoldr)
@@ -284,18 +445,20 @@ extract_modelinfo_from_jmodeltest()
 {
     #count=`ls -1 $1/*.bestModel 2>/dev/null | wc -l`
     count=$(ls -1 $1/*.bestModel 2>/dev/null | wc -l)
-    if [[ $count != 0 ]];
+    #if [[ $count != 0 ]];
+    if [ $count != 0 ];
     then
         for file in ./$1/*.bestModel; do 
             echo -ne "$(basename $file)" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $1/$2
             bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed -n 's/.*Model \= \([^ ]*\).*/\1/p' 2>/dev/null) # Parse best model from jModeltest output
-            if [[ ! -z "$bestModel" ]];
+            #if [[ ! -z "$bestModel" ]];
+            if [ ! -z "$bestModel" ];
             then
                 echo " $bestModel" >> $1/$2  # NOTE: model has to be preceeded by one space!
             else
                 echo " GTR+I+G" >> $1/$2  # If error in modeltesting or parsing, set GTR+I+G as standard model
                 if [ $3 -eq 1 ]; then
-                    echo -ne " WARNING | $(get_current_time) | No model extracted from file $file; setting model GTR+I+G as replacement.\n"
+                    echo -ne " WARN  | $(get_current_time) | No model extracted from file $file; setting model GTR+I+G as replacement.\n"
                 fi
             fi
         done
@@ -315,10 +478,11 @@ modeltesting_via_jmodeltest()
 {
     #count=`ls -1 $1/partition_* 2>/dev/null | wc -l`
     count=$(ls -1 $1/partition_* 2>/dev/null | wc -l)
-    if [[ $count != 0 ]];
+    #if [[ $count != 0 ]];
+    if [ $count != 0 ];
     then
         for file in ./$1/partition_*; do
-        partition_time_start=$(date +%s)
+        partit_runtime_start=$(date +%s)
         # java -jar $2 -tr $nmbrCores -d "$file" -f -i -g 4 -AIC -o ${file}.bestModel 2>${file}.bestModel.err
         java -jar $2 -d "$file" -f -i -g 4 -AICc 1>${file}.bestModel 2>&1
         # JMODELTEST OPTIONS SELECTED:
@@ -328,10 +492,11 @@ modeltesting_via_jmodeltest()
         # -AIC calculate the Akaike Information Criterion
         # -g numberOfCategories: include models with rate variation among sites and number of categories
         # (-tr numberOfThreads)  # NOTE: Option no longer used, because: By default, the total number of cores in the machine is used by jModelTest (see p. 11 of jModelTest 2 Manual v0.1.10).
-        partition_time_dur=$((($(date +%s)-$partition_time_start)/60))
-        partition_time_dur_prettyp=$(printf "%.3f minutes\n" $partition_time_dur)
+
+        partit_runtime_dur=$(bc -l <<< "($(date +%s)-$partit_runtime_start)/60")
+        LC_ALL=C partit_runtime_dur_pp=$(printf "%.3f minutes\n" $partit_runtime_dur)
         if [ $3 -eq 1 ]; then
-            echo -ne " INFO  | $(get_current_time) |   Processing complete for partition: $(basename $file); Execution time: $partition_time_dur_prettyp\n"
+            echo -ne " INFO  | $(get_current_time) |   Processing complete for partition: $(basename $file); Execution time: $partit_runtime_dur_pp\n"
         fi
         done
     else
@@ -340,159 +505,97 @@ modeltesting_via_jmodeltest()
     fi
 }
 
-reconstitute_datablock_as_interleaved()
-#   This function reconstitutes a data block from individual partitions, but makes the data block interleaved.
-#   INP:  $1: path to temp folder ($tempFoldr)
-#         $2: name of DATA-block ($dataBlock)
-#         $3: name of outfile ($outFilenm)
-#   OUP:  none; writes to outfile
+########################################################################
+########################################################################
+
+# FUNCTIONS SPECIFIC TO 'PARTITIONFINDER2'
+
+# assemble_mrbayes_block_from_partitionfinder2 $option1 $option2
+assemble_mrbayes_block_from_partitionfinder2()
+#   This function ...
+#   INP:  $1: foo bar ($tempFoldr)
+#         $2: foo bar ($mdltstBin)
+#         $3: foo bar ($vrbseBool)
+#         $4: foo bar ($get_current_time)
+#   OUP:  none; generates ...
 {
-    # Step 1: Append dimension and format info of DATA-block
-    cat $1/$2 | sed -n '/begin data\;/,/matrix/p' >> $3
-    # Step 2: Specify that matrix is interleaved
-    sed -i '/format/ s/\;/ interleave\=yes\;/' $3 # in-line replacement of semi-colon with interleave-info plus semi-colon, if line has keyword 'format'
-    # Step 3: Append the individual partitions
-    for p in $(ls $1/partition_* | grep -v bestModel); do
-        echo -ne "\n[$(basename $p)]\n" >> $3
-        pureMatrx=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
-        algnMatrx=$(echo "$pureMatrx" | column -t)
-        echo "$algnMatrx" >> $3 # Append only the matrix of a partition, not the preceeding dimension and format info; also, don't append the closing ';\nend;' per partition
-    done
-    # Step 4: Append a closing ';\nend;'
-    echo -e "\n;\nend;" >> $3
+    echo 0
 }
 
-split_matrix_into_partitions()
-#   This function takes the matrix of a NEXUS file and extracts from it a 
-#   character range (hereafter "sub-matrix") specified by the definition 
-#   of a charsets line.
-#   INP:  $1: path to temp folder
-#         $2: name of file containing the DATA-block
-#         $3: name of file containing the SETS-block
-#   OUP:  file with name $charrngFn in temp folder
-#         file with name $partFname in temp folder
+# convert_datablock_to_phylip $option1 $option2
+convert_datablock_to_phylip()
+#   This function ...
+#   INP:  $1: foo bar ($tempFoldr)
+#         $2: foo bar ($mdltstBin)
+#         $3: foo bar ($vrbseBool)
+#         $4: foo bar ($get_current_time)
+#   OUP:  none; generates ...
 {
-    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $2)
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $3 | grep 'charset')
-    nexusNew1='#NEXUS\n\n'
-    nexusNew2=$(sed -e '/matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
-    nexusNew3='\nmatrix'
-    nexusNew4=';\nend;\n'
-    myCounter=0
-    while IFS= read -r line; do 
-        myCounter=$((myCounter+1))
-        partitFn1=$(printf %03d $myCounter)
-        partitFn2=$(echo "$line" | awk '{print $2}')
-        partitnFn=partition_${partitFn1}_${partitFn2}
-        # Get the info on the charset range
-        charstRng=$(echo "$line" | awk '{print $4}' | sed 's/\;//')
-        # Step 1 of assembling the new partition file
-        echo -e "$nexusNew1$nexusNew2$nexusNew3" > $1/$partitnFn
-        # Step 2 of assembling the new partition file: Add the sub-matrix
-        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' <(echo "$charstRng") FS=' ' <(echo "$pureMatrx") >> $1/$partitnFn
-        # Step 3 of assembling the new partition file
-        echo -e "$nexusNew4" >> $1/$partitnFn
-        # Get the length of the sub-matrix
-        mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charstRng"))
-        # Replace the number of characters with the length of the sub-matrix
-        sed -i "/dimensions / s/nchar\=.*\;/nchar\=$mtrxLngth\;/" $1/$partitnFn
-    done <<< "$chrsetLns" # Using a here-string
+    echo 0
 }
 
-split_nexus_into_blocks()
-#   This function splits a NEXUS file into individual blocks.
-#   INP:  $1: name of complete NEXUS file
-#         $2: name of file containing the extracted DATA-block
-#         $3: name of file containing the extracted SETS-block
-#   OUP:  file with DATA-block
-#         file with SETS-block
+# extract_modelinfo_from_partitionfinder2 $option1 $option2
+extract_modelinfo_from_partitionfinder2()
+#   This function ...
+#   INP:  $1: foo bar ($tempFoldr)
+#         $2: foo bar ($mdltstBin)
+#         $3: foo bar ($vrbseBool)
+#         $4: foo bar ($get_current_time)
+#   OUP:  none; generates ...
 {
-    # Extract the blocks
-    cat $1 | sed -n '/begin data\;/,/end\;/p' > $2
-    cat $1 | sed -n '/begin sets\;/,/end\;/p' > $3
+    echo 0
 }
 
-test_if_partitions_overlap()
-#   This function tests if any of the partitions (i.e., charset ranges)
-#   overlap. If they do, an error is thrown.
-#   INP:  $1: name of file containing the SETS-block
-#   OUP:  none
+# modeltesting_via_partitionfinder2 $option1 $option2
+modeltesting_via_partitionfinder2()
+#   This function ...
+#   INP:  $1: foo bar ($tempFoldr)
+#         $2: foo bar ($mdltstBin)
+#         $3: foo bar ($vrbseBool)
+#         $4: foo bar ($get_current_time)
+#   OUP:  none; generates ...
 {
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
-    charstRng=$(echo "$chrsetLns" | awk '{print $4}' | sed 's/\;//')
-    # Test if any of the charset ranges are overlapping
-    charstOlp=$(echo "$charstRng" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
-    if [ ! "$charstOlp" = "" ]; then 
-        echo -ne " ERROR | $(get_current_time) | Charset range overlaps with subsequent range: $charstOlp\n"
-        exit 1
-    fi
+    echo 0
 }
 
-write_mrbayes_block()
-#   This function appends a MrBayes block to a file ($outFilenm).
-#   INP:  $1: path to temp folder
-#         $2: name of outfile
-#         $3: name of lset definitions file
-#         $4: charsets variable
-#   OUP:  none; operates on lset definitions file
+# write_partitionfinder_config_file $option1 $option2
+write_partitionfinder_config_file()
+#   This function ...
+#   INP:  $1: foo bar ($tempFoldr)
+#         $2: foo bar ($mdltstBin)
+#         $3: foo bar ($vrbseBool)
+#         $4: foo bar ($get_current_time)
+#   OUP:  none; generates ...
 {
-    echo -e 'begin mrbayes;' >> $2
-    echo -e 'set autoclose=yes;' >> $2
-    echo -e 'set nowarnings=yes;' >> $2
-    echo "$4" >> $2
-    echo -n 'partition combined =' $(echo "$4" | wc -l) ': ' >> $2 # Line must not end with linebreak, thus -n
-    echo "$4" | awk '{print $2}' | awk '{ORS=", "; print; }' >> $2
-    sed -i 's/\(.*\)\,/\1;/' $2 # Replace final comma with semi-colon; don't make this replacement global
-    echo -e '\nset partition = combined;' >> $2 # Option -e means that \n generates new line
-    cat $1/$3 >> $2
-    echo 'prset applyto=(all) ratepr=variable;' >> $2
-    echo 'unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);' >> $2
-    echo -e 'mcmcp ngen=20000000 temp=0.1 samplefreq=10000;\nmcmc;' >> $2
-    echo -e 'end;\n\nquit;' >> $2
+    echo 0
 }
 
 ########################################################################
 ########################################################################
 
-## STEP 00: CHECKING SYSTEM AND BASH SHELL
+## EVALUATING SYSTEM AND BASH SHELL
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 00: Evaluate system and bash shell\n"
-fi
-
-# Evaluate number of cores available
-nmbrCores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null) # The "||" indicates that if "nproc" fails, do "grep ^processor /proc/cpuinfo".
-posIntgr='^[0-9]+$'
-if ! [[ $nmbrCores =~ $posIntgr ]]; then
-    nmbrCores=1
+    echo -ne " INFO  | $(get_current_time) | Evaluating system and bash shell\n"
 fi
 
 # Print system details to log
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) |   System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $nmbrCores\n"
+    echo -ne " INFO  | $(get_current_time) |   System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $(get_num_of_avail_cores)\n"
     echo -ne " INFO  | $(get_current_time) |   Bash info: $(bash --version | head -n1 2>/dev/null)\n"
 fi
 
 ########################################################################
 
-## STEP 01: CHECKING INFILES
+## CHECKING INFILES
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 01: Checking infiles\n"
+    echo -ne " INFO  | $(get_current_time) | Checking infiles\n"
 fi
 
 # Renaming input variables
 nexusFile=$OPT_A
-mdltstBin=$OPT_B
-mdltstTyp=$OPT_C
-
-# Checking if input files exists
-if [[ ! -f $nexusFile ]]; then 
-    echo -ne " ERROR | $(get_current_time) | Not found: $nexusFile\n"
-    exit 1
-fi
-if [[ ! -f $mdltstBin ]]; then 
-    echo -ne " ERROR | $(get_current_time) | Not found: $mdltstBin\n"
-    exit 1
-fi
+mdltstTyp=$OPT_B
+mdltstBin=$OPT_C
+outFilenm=$OPT_D
 
 # Define outfile namestem
 baseName=$(basename $nexusFile) # Using basename to strip off path
@@ -505,124 +608,118 @@ setsBlock=${filenStem}_NexusSetBlock
 unspltMtx=${filenStem}_UnsplitMatrix
 bestModls=${filenStem}_BestFitModels
 lsetDefns=${filenStem}_LsetDefinitns
-outFilenm=${filenStem}_${totalrun_time_start_prettyp}_partitioned.mrbayes
 
-# Check if outfile already exists
-if [[ $outFilenm = /* ]];
-then
-    echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $outFilenm\n"
-    exit 1
-fi
+# Checking input and output file availability
+check_inp_outp_availability $nexusFile $mdltstBin $outFilenm $get_current_time
 
-# Make and cd into temporary folder
-tempFoldr=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
+# Make temporary folder
+#tempFoldr=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
+tempFoldr=${filenStem}_${runtime_start_pp}_runFiles
 mkdir -p $tempFoldr
 
 ########################################################################
 
-## STEP 02: RE-FORMATTING INPUT NEXUS FILE
+## RE-FORMATTING INPUT NEXUS FILE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 02: Re-formatting input NEXUS file\n"
+    echo -ne " INFO  | $(get_current_time) | Re-formatting input NEXUS file\n"
 fi
 
 reformat_nexus_file $nexusFile $tempFoldr/$reformNex
 
 # Extract charsets
 charSetsL=$(cat $tempFoldr/$reformNex | grep 'charset')
+# Extract number of characters in DNA matrix
+ncharVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*nchar=\([^;]*\).*/\1/p')
+# Extract number of taxa
+ncharTax=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*ntax=\([^;]*\).*/\1/p')
 
 ########################################################################
 
-## STEP 03: SPLITTING NEXUS FILE INTO BLOCKS
+## SPLITTING NEXUS FILE INTO BLOCKS
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 03: Splitting NEXUS file into blocks\n"
+    echo -ne " INFO  | $(get_current_time) | Splitting NEXUS file into blocks\n"
 fi
 
-split_nexus_into_blocks $tempFoldr/$reformNex $tempFoldr/$dataBlock $tempFoldr/$setsBlock
-
-# Check if dataBlock successfully generated
-if [ ! -s $tempFoldr/$dataBlock ];
-then
-    echo -ne " ERROR | $(get_current_time) | No file size: $dataBlock\n"
-    exit 1
-fi
-
-# Check if setsBlock successfully generated
-if [ ! -s $tempFoldr/$setsBlock ];
-then
-    echo -ne " ERROR | $(get_current_time) | No file size: $setsBlock\n"
-    exit 1
-fi
+split_nexus_into_blocks $tempFoldr $reformNex $dataBlock $setsBlock
 
 ########################################################################
 
-## STEP 04: CONFIRM THAT PARTITIONS DO NOT OVERLAP
+## CONFIRMING THAT PARTITIONS DO NOT OVERLAP
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 04: Confirming that partitions do not overlap\n"
+    echo -ne " INFO  | $(get_current_time) | Confirming that partitions do not overlap\n"
 fi
 
 test_if_partitions_overlap $tempFoldr/$setsBlock
 
 ########################################################################
 
-## STEP 05: ENSURE THAT PARTITIONS FORM A CONTINUOUS RANGE
+## ENSURING THAT PARTITIONS FORM A CONTINUOUS RANGE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 05: Ensuring that partitions form a continuous range\n"
+    echo -ne " INFO  | $(get_current_time) | Ensuring that partitions form a continuous range\n"
 fi
-
-# Extract number of characters in DNA matrix
-ncharVar=$(grep ^dimensions $tempFoldr/$dataBlock | sed -n 's/.*nchar=\([^;]*\).*/\1/p')
 
 ensure_partitions_form_continuous_range $tempFoldr/$setsBlock $ncharVar
 
 ########################################################################
 
-## STEP 06: SPLITTING MATRIX INTO PARTITIONS
+## SPLITTING MATRIX INTO PARTITIONS
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 06: Splitting matrix into partitions\n"
+    echo -ne " INFO  | $(get_current_time) | Splitting matrix into partitions\n"
 fi
 
 split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$setsBlock
 
 ########################################################################
 
-## STEP 07: CONDUCTING MODELTESTING
+## PREPARING FILES FOR MODELTESTING
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 07: Conducting modeltesting\n"
+    echo -ne " INFO  | $(get_current_time) | Preparing files for modeltesting\n"
 fi
 
-modeltesting_via_jmodeltest $tempFoldr $mdltstBin $vrbseBool $get_current_time
+if [ "$mdltstTyp" = "partitionfinder2" ]; then
+    echo 0
+    #convert_datablock_to_phylip $option1 $option2
+    #write_partitionfinder_config_file $option1 $option2
+fi
 
 ########################################################################
 
-## STEP 08: EXTRACTING MODEL INFORMATION FROM JMODELTEST2
+## CONDUCTING MODELTESTING
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 08: Extracting model information from jModelTest2\n"
+    echo -ne " INFO  | $(get_current_time) | Conducting modeltesting via: $mdltstTyp\n"
 fi
 
-extract_modelinfo_from_jmodeltest $tempFoldr $bestModls $vrbseBool $get_current_time
+if [ "$mdltstTyp" = "jmodeltest" ]; then
+    modeltesting_via_jmodeltest $tempFoldr $mdltstBin $vrbseBool
+fi
+
+if [ "$mdltstTyp" = "partitionfinder2" ]; then
+    echo 0
+    #modeltesting_via_partitionfinder2 $option1 $option2
+fi
 
 ########################################################################
 
-## STEP 09: CONVERTING MODELTEST RESULTS TO LSET SPECS FOR MRBAYES
+## EXTRACTING INFORMATION FROM MODELTESTING RESULTS
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 09: Converting modeltest results to lset definitions for MrBayes\n"
+    echo -ne " INFO  | $(get_current_time) | Extracting information from modeltesting results\n"
 fi
 
-if [[ ! -f $tempFoldr/$bestModls ]];
-then 
-    echo -ne " ERROR | $(get_current_time) | File not found: $tempFoldr/$bestModls\n"
-    exit 1
+if [ "$mdltstTyp" = "jmodeltest" ]; then
+    extract_modelinfo_from_jmodeltest $tempFoldr $bestModls $vrbseBool
+    convert_models_into_lset $tempFoldr $bestModls $lsetDefns "$charSetsL"  # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
 fi
 
-# Setting up lset specifications
-convert_models_into_lset $tempFoldr $bestModls $lsetDefns "$charSetsL"
-# NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
+if [ "$mdltstTyp" = "partitionfinder2" ]; then
+    echo 0
+    # extract_modelinfo_from_partitionfinder2 $option1 $option2
+fi
 
 ########################################################################
 
-## STEP 10: ASSEMBLING OUTPUT FILE
+## ASSEMBLING OUTPUT FILE
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 10: Assembling partitions into output file\n"
+    echo -ne " INFO  | $(get_current_time) | Assembling output file\n"
 fi
 
 echo -e "#NEXUS\n" > $outFilenm
@@ -636,42 +733,38 @@ echo -e "\n[\n$(cat $tempFoldr/$setsBlock)\n]\n" >> $outFilenm
 # Append info on best-fitting models
 echo -e "\n[\nBest-fitting models identified:\n$(cat $tempFoldr/$bestModls)\n]\n" >> $outFilenm
 
+if [ "$mdltstTyp" = "jmodeltest" ]; then
+    assemble_mrbayes_block_from_jmodeltest $tempFoldr $outFilenm $lsetDefns "$charSetsL"  # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
+fi
+
+if [ "$mdltstTyp" = "partitionfinder2" ]; then
+    echo 0
+    # assemble_mrbayes_block_from_partitionfinder2 $option1 $option2
+fi
+
 ########################################################################
 
-## STEP 11: GENERATING MRBAYES BLOCK
+## CLEANING UP THE WORK DIRECTORY
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 11: Generating MrBayes block\n"
+    echo -ne " INFO  | $(get_current_time) | Cleaning up\n"
 fi
 
-write_mrbayes_block $tempFoldr $outFilenm $lsetDefns "$charSetsL"
-# NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
-
-########################################################################
-
-## STEP 12: CLEANING UP THE WORK DIRECTORY
-if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Step 12: Cleaning up\\n"
+if [ $keepBool -eq 0 ]; then
+    rm -r $tempFoldr
 fi
-
-if [ $vrbseBool -eq 1 ]; then
-    runFolder=${filenStem}_${totalrun_time_start_prettyp}_runFiles
-    mkdir -p $runFolder
-    cp -r $tempFoldr/* $runFolder
-fi
-rm -r $tempFoldr
 
 # Stop timing execution time
-totalrun_time_dur=$((($(date +%s)-$totalrun_time_start)/60))
-totalrun_time_dur_prettyp=$(printf "%.3f minutes\n" $totalrun_time_dur)
+runtime_dur=$(bc -l <<< "($(date +%s)-$runtime_start)/60")
+LC_ALL=C runtime_dur_pp=$(printf "%.3f minutes\n" $runtime_dur)  # NOTE: "LC_ALL=C" is important due to different locales (German comma vs. world's decimal point)
 
 # End of file message
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Processing complete for file: $nexusFile; Execution time: $totalrun_time_dur_prettyp\n"
+    echo -ne " INFO  | $(get_current_time) | Processing complete for file: $nexusFile; Execution time: $runtime_dur_pp\n"
 fi
 
 ########################################################################
 
-# Exit without mistakes
+## EXIT WITHOUT MISTAKES
 exit 0
 
 ########################################################################

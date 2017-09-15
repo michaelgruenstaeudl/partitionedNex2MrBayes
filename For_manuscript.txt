@@ -3,3 +3,21 @@ The datatype must be set to DNA only (and not "standard" (i.e., mixture of DNA a
 My code does contain matrix checks (i.e., check if charset range continuous; check if no range is overlapping, etc.); it is unclear that PartitionFinder2 does that.
 
 The MrBayes block of PartitionFinder2 cannot be pasted below a NEXUS block for large datasets > 99 990 bp, because MrBayes cannot handle those. Instead, the NEXUS block must be partitioned immediately.
+
+
+# NEW FEATURES:
+
+# (a) Output now displays interleaved matrix.
+# ORIGINAL PROBLEM: The Datablock in the output must not be copied from the input, but must be assembled as interleaved matrices from the individual partitions. The reason for this: MrBayes only accepts lines with 99990 characters, which may be smaller than the complete matrix. Thus, an interleaving is necessary.
+
+#> It looks like the maximum allowed length of a token is defined in the 
+#> source file mb.h.  You might try changing the value in the line:
+#>
+#> #define    CMD_STRING_LENGTH        100000
+#>
+#> to some value higher than the number of characters per line in your 
+#> data set, then recompiling.
+
+# (b) If an error during modeltesting for a single partition occurs (or the model is not correctly parsed), the code simply assigns a general model (GTR+I+G) to said partition.
+# ORIGINAL PROBLEM: If an error during modeltesting for a single partition occurs, it should not crash the execution of the script for all partitions. Hence, future improvements of the code should make sure that an error during one modeltesting iterative (i.e., for one of several partitions) simply assigns a general model (GTR+I+G) to said partition if an error is thrown (i.e., comparable to a try-catch statement).
+

@@ -1,3 +1,4 @@
 WD=/home/michael_science/git/michaelgruenstaeudl_partitionedNex2MrBayes
 TESTFILE=test0.nex
-bash $WD/partitionedNex2MrBayes_2017.09.14.1600.sh -f $WD/examples/01_input/$TESTFILE -m ~/binaries/jModelTest_2.1.7/jModelTest.jar -t jmodeltest -v -k > ${TESTFILE}.log
+FILESTEM=${TESTFILE%.nex*}
+bash $WD/partitionedNex2MrBayes_2017.09.15.1100.sh -f $WD/examples/01_input/$TESTFILE -t jmodeltest -b ~/binaries/jModelTest_2.1.7/jModelTest.jar -o $WD/examples/01_input/${FILESTEM}.mrbayes -v -k > ${FILESTEM}.log

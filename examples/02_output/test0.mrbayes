@@ -68,8 +68,5 @@ lset applyto=(1) nst=6 rates=invgamma; [# 001_abcD GTR+I+G]
 lset applyto=(2) nst=6 rates=gamma; [# 002_efgH GTR+G]
 prset applyto=(all) ratepr=variable;
 unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);
-mcmcp ngen=20000000 temp=0.1 samplefreq=10000;
-mcmc;
+[mcmcp ngen=20000000 temp=0.1 samplefreq=10000;mcmc;]
 end;
-
-quit;
