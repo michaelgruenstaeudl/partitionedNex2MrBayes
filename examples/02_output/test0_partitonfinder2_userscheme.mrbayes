@@ -53,20 +53,28 @@ end;
 
 [
 Best-fitting models identified:
-001_abcD GTR+I+G
-002_efgH GTR+G
+abcD GTR+G
+efgH GTR+G
 ]
 
 begin mrbayes;
-set autoclose=yes;
-set nowarnings=yes;
-charset abcD = 1-1000;
-charset efgH = 1001-10000;
-partition combined = 2 : abcD, efgH; 
-set partition = combined;
-lset applyto=(1) nst=6 rates=invgamma; [# 001_abcD GTR+I+G]
-lset applyto=(2) nst=6 rates=gamma; [# 002_efgH GTR+G]
-prset applyto=(all) ratepr=variable;
-unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);
-[mcmcp ngen=20000000 temp=0.1 samplefreq=10000;mcmc;]
+
+	charset Subset1 = 1-1000;
+	charset Subset2 = 1001-10000;
+
+	partition PartitionFinder = 2:Subset1, Subset2;
+	set partition=PartitionFinder;
+
+	lset applyto=(1) nst=6 rates=gamma;
+	lset applyto=(2) nst=6 rates=gamma;
+
+	prset applyto=(all) ratepr=variable;
+	unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);
+
 end;
+
+[
+Continue with:
+mb -i ./test0_partitonfinder2_userscheme.mrbayes
+]
+

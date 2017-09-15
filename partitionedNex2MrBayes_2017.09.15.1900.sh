@@ -45,6 +45,7 @@ OPT_C="file path to, and name of, the modeltesting binary or script"
 OPT_D="file path to, and name of, the output file"
 keepBool=0
 vrbseBool=0
+usrschemeBool=0
 
 # Set fonts for help function
 NORM=`tput sgr0`
@@ -62,6 +63,7 @@ function my_help {
     echo "${REV}-b${NORM}  --Sets file path to, and name of, the modeltesting${BOLD}binary or script${NORM}. No default exists."
     echo "${REV}-o${NORM}  --Sets file path to, and name of, ${BOLD}output file${NORM}. No default exists."
     echo "Optional command line switches:"
+    echo "${REV}-u${NORM}  --Estimating model fit only for the ${BOLD}user-defined${NORM} partitioning scheme. Only applicable for PartitionFinder2. Default is ${BOLD}off${NORM}."
     echo "${REV}-k${NORM}  --${BOLD}Keeps${NORM} temporary files. Default is ${BOLD}off${NORM}."
     echo "${REV}-v${NORM}  --Displays ${BOLD}verbose${NORM} status messages. Default is ${BOLD}off${NORM}."
     echo -e "${REV}-h${NORM}  --Displays this help message."\\n
@@ -78,7 +80,7 @@ fi
 
 # GETOPTS CODE
 
-while getopts :f:t:b:o:hkv FLAG; do
+while getopts :f:t:b:o:hukv FLAG; do
   case $FLAG in
     f)  OPT_A=$OPTARG
         ;;
@@ -89,6 +91,8 @@ while getopts :f:t:b:o:hkv FLAG; do
     o)  OPT_D=$OPTARG
         ;;
     h)  my_help
+        ;;
+    u)  usrschemeBool=1
         ;;
     k)  keepBool=1
         ;;
@@ -103,7 +107,7 @@ while getopts :f:t:b:o:hkv FLAG; do
   esac
 done
 
-shift $((OPTIND-1))
+#shift $((OPTIND-1))
 
 ########################################################################
 ########################################################################
@@ -129,7 +133,7 @@ check_inp_outp_availability()
     fi
     #if [[ ! -f $2 ]]; then 
     if [ ! -f $2 ]; then 
-        echo -ne " ERROR | $(get_current_time) | Input file not found: $2\n"
+        echo -ne " ERROR | $(get_current_time) | Modeltest binary/script file not found: $2\n"
         exit 1
     fi
     # Check if outfile already exists
@@ -145,23 +149,24 @@ ensure_partitions_form_continuous_range()
 #   If the partitions don't form such a continuous range, additional
 #   ranges are inserted such that all ranges taken together form a 
 #   continuous range from {1} to {total size of matrix}.
-#   INP:  $1: name of file containing the SETS-block
-#         $2: total size of matrix
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of file containing the SETS-block
+#         $3: total size of matrix
 #   OUP:  update of $1
 {
     # Get charset definition lines
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1/$2 | grep 'charset')
     # Convert from discrete to continuous range
     contRnge1=$(echo "$chrsetLns" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
     # Add concluding partition, if missing
-    matrxLngth=$2
+    matrxLngth=$3
     contRnge2=$(echo "$contRnge1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
-    echo "begin sets;" > $1
-    echo "$contRnge1" >> $1
-    #echo -ne "$contRnge2" >> $1 # Option -ne necessary for pretty formatting only.
-    echo "$contRnge2" >> $1
-    echo "end;" >> $1
+    echo "begin sets;" > $1/$2
+    echo "$contRnge1" >> $1/$2
+    #echo -ne "$contRnge2" >> $1/$2 # Option -ne necessary for pretty formatting only.
+    echo "$contRnge2" >> $1/$2
+    echo "end;" >> $1/$2
 }
 
 get_num_of_avail_cores()
@@ -189,7 +194,7 @@ reconstitute_datablock_as_interleaved()
     # Step 2: Specify that matrix is interleaved
     sed -i '/format/ s/\;/ interleave\=yes\;/' $3 # in-line replacement of semi-colon with interleave-info plus semi-colon, if line has keyword 'format'
     # Step 3: Append the individual partitions
-    for p in $(ls $1/partition_* | grep -v bestModel); do
+    for p in $(ls $1/partition_[0-9]* | grep -v bestModel); do # NOTE: Use [0-9] to separate from 'partition_finder.cfg'
         echo -ne "\n[$(basename $p)]\n" >> $3
         pureMatrx=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
         algnMatrx=$(echo "$pureMatrx" | column -t)
@@ -258,10 +263,10 @@ split_matrix_into_partitions()
 #   OUP:  file with name $charrngFn in temp folder
 #         file with name $partFname in temp folder
 {
-    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $2)
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $3 | grep 'charset')
+    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $1/$2)
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1/$3 | grep 'charset')
     nexusNew1='#NEXUS\n\n'
-    nexusNew2=$(sed -e '/matrix/,$d' $2) # Get section between "#NEXUS" and "MATRIX"
+    nexusNew2=$(sed -e '/matrix/,$d' $1/$2) # Get section between "#NEXUS" and "MATRIX"
     nexusNew3='\nmatrix'
     nexusNew4=';\nend;\n'
     myCounter=0
@@ -315,10 +320,11 @@ split_nexus_into_blocks()
 test_if_partitions_overlap()
 #   This function tests if any of the partitions (i.e., charset ranges)
 #   overlap. If they do, an error is thrown.
-#   INP:  $1: name of file containing the SETS-block
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of file containing the SETS-block
 #   OUP:  none
 {
-    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1 | grep 'charset')
+    chrsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' $1/$2 | grep 'charset')
     charstRng=$(echo "$chrsetLns" | awk '{print $4}' | sed 's/\;//')
     # Test if any of the charset ranges are overlapping
     charstOlp=$(echo "$charstRng" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
@@ -473,7 +479,6 @@ modeltesting_via_jmodeltest()
 #   INP:  $1: path to temp folder ($tempFoldr)
 #         $2: name of jModeltest binary ($mdltstBin)
 #         $3: boolean variable if verbose or not ($vrbseBool)
-#         $4: function to get current time ($get_current_time)
 #   OUP:  none; generates *.bestModel* output files in temp folder
 {
     #count=`ls -1 $1/partition_* 2>/dev/null | wc -l`
@@ -510,78 +515,128 @@ modeltesting_via_jmodeltest()
 
 # FUNCTIONS SPECIFIC TO 'PARTITIONFINDER2'
 
-# assemble_mrbayes_block_from_partitionfinder2 $option1 $option2
 assemble_mrbayes_block_from_partitionfinder2()
 #   This function ...
-#   INP:  $1: foo bar ($tempFoldr)
-#         $2: foo bar ($mdltstBin)
-#         $3: foo bar ($vrbseBool)
-#         $4: foo bar ($get_current_time)
-#   OUP:  none; generates ...
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of outfile ($outFilenm)
+#   OUP:  append to the outfile
 {
-    echo 0
+    pf2_bestscheme=$1/analysis/best_scheme.txt
+    kw1="begin mrbayes;"
+    kw2="end;"
+    mrbayes_block=$(sed -n "/$kw1/,/$kw2/p" $pf2_bestscheme)
+    if [ ! -z "$mrbayes_block" ]; then
+        echo "$mrbayes_block" >> $2 # NOTE: Append only! Also: $2 (i.e., outFilenm) does not reside in $1 (i.e., $tempFoldr)
+    else
+        echo -ne " ERROR | $(get_current_time) | Parsing of MRBAYES-block unsuccessful from file: $pf2_bestscheme\n"
+        exit 1
+    fi
 }
 
-# convert_datablock_to_phylip $option1 $option2
 convert_datablock_to_phylip()
-#   This function ...
-#   INP:  $1: foo bar ($tempFoldr)
-#         $2: foo bar ($mdltstBin)
-#         $3: foo bar ($vrbseBool)
-#         $4: foo bar ($get_current_time)
-#   OUP:  none; generates ...
+#   This function converts a NEXUS-formatted DATA-block to a PHYLIP-file.
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: filename of DATA-block ($dataBlock)
+#         $3: number of taxa in DNA matrix ($ntaxVar)
+#         $4: number of characters in DNA matrix ($ncharVar)
+#         $5: name of outfile ($phylipFil)
+#   OUP:  writes a phylip-formatted file to disk
 {
-    echo 0
+    # Write ntax and nvar to first line of phylip file
+    echo "$3 $4" > $1/$5
+    # Extract matrix from DATA-block
+    pureMatrx=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' $1/$2)
+    #algnMatrx=$(echo "$pureMatrx" | column -t)
+    #echo "$algnMatrx" >> $1/$5
+    echo "$pureMatrx" >> $1/$5
 }
 
-# extract_modelinfo_from_partitionfinder2 $option1 $option2
 extract_modelinfo_from_partitionfinder2()
 #   This function ...
-#   INP:  $1: foo bar ($tempFoldr)
-#         $2: foo bar ($mdltstBin)
-#         $3: foo bar ($vrbseBool)
-#         $4: foo bar ($get_current_time)
-#   OUP:  none; generates ...
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of model overview file ($bestModls)
+#   OUP:  writes the bestModls file to disk
 {
-    echo 0
+    pf2_bestscheme=$1/analysis/best_scheme.txt
+    if [ -f "$pf2_bestscheme" ]; then
+        kw1="Subset \| Best Model"
+        kw2="Scheme Description in PartitionFinder format"
+        bestMdlOvw=$(sed -n "/$kw1/,/$kw2/p" $pf2_bestscheme | grep '^[0-9]')
+        bestModels=$(echo "$bestMdlOvw" | sed 's/[ \t]*//g' | awk -F'|' '{print $5" "$2}')
+        if [ ! -z "$bestModels" ]; then
+            echo "$bestModels" > $1/$2 # It's fine to overwrite the file here, as variable $bestModels already contains model names
+        else
+            echo -ne " WARN  | $(get_current_time) | Parsing of models unsuccessful from file: $pf2_bestscheme\n"
+        fi
+    else
+        echo -ne " ERROR | $(get_current_time) | No result files of the modeltesting (*.bestModel) found.\n"
+        exit 1
+    fi
 }
 
-# modeltesting_via_partitionfinder2 $option1 $option2
 modeltesting_via_partitionfinder2()
-#   This function ...
-#   INP:  $1: foo bar ($tempFoldr)
-#         $2: foo bar ($mdltstBin)
-#         $3: foo bar ($vrbseBool)
-#         $4: foo bar ($get_current_time)
-#   OUP:  none; generates ...
+#   This function conducts modeltesting via PartitionFinder2
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: path to PartitionFinder2 Python script ($mdltstBin)
+#   OUP:  none; generates an output folder named 'analysis' in temp folder
 {
-    echo 0
+    # Test if Python2.7 present
+    if command -v python2.7 1>/dev/null 2>&1; then
+        :
+    else
+        echo -ne " ERROR | $(get_current_time) | Cannot find Python2.7 interpreter.\n"
+        exit 1
+    fi
+    
+    # Conduct modeltesting
+    if [ -f "$1/partition_finder.cfg" ]; then
+        python2 $2 $1 1>$1/partitionfinder2_run.log 2>&1
+    else
+        echo -ne " ERROR | $(get_current_time) | No PartitionFinder2 config file (partition_finder.cfg) found.\n"
+        exit 1
+    fi
 }
 
-# write_partitionfinder_config_file $option1 $option2
 write_partitionfinder_config_file()
-#   This function ...
-#   INP:  $1: foo bar ($tempFoldr)
-#         $2: foo bar ($mdltstBin)
-#         $3: foo bar ($vrbseBool)
-#         $4: foo bar ($get_current_time)
-#   OUP:  none; generates ...
+#   This function generates a config file as required by PartitionFinder2.
+#   INP:  $1: path to temp folder ($tempFoldr)
+#         $2: name of phylip-formatted file ($phylipFil)
+#         $3: multi-line string of charsets ($charSetsL)
+#         $4: boolean variable if userscheme only or not ($usrschemeBool)
+#   OUP:  writes a phylip-formatted file to disk
 {
-    echo 0
+    echo "alignment = $2;" > $1/partition_finder.cfg
+    echo -e "branchlengths = linked;\nmodels = mrbayes;\nmodel_selection = aicc;\n[data_blocks]" >> $1/partition_finder.cfg
+    echo "$charSetsL" >> $1/partition_finder.cfg
+    
+    # Setting userscheme-only search in PartitionFinder2 or not.
+    if [ $4 -eq 1 ]; then
+        echo -ne " INFO  | $(get_current_time) | Estimating model fit of user-defined partition scheme only\n"
+        echo -e "[schemes]\nsearch = user;\n" >> $1/partition_finder.cfg
+        charsetN=$(echo "$3" | awk '{print "("$2")"}')
+        echo -e "userdefined = $charsetN;\n" >> $1/partition_finder.cfg
+    else
+        echo -e "[schemes]\nsearch = greedy;\n" >> $1/partition_finder.cfg
+    fi
 }
 
 ########################################################################
 ########################################################################
 
-## EVALUATING SYSTEM AND BASH SHELL
+## EVALUATING SYSTEM, BASH SHELL AND SCRIPT EXECUTION
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Evaluating system and bash shell\n"
+    echo -ne " INFO  | $(get_current_time) | Evaluating system, bash shell and script execution"\\n
 fi
 
 # Print system details to log
 if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) |   System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $(get_num_of_avail_cores)\n"
-    echo -ne " INFO  | $(get_current_time) |   Bash info: $(bash --version | head -n1 2>/dev/null)\n"
+    echo -ne " INFO  | $(get_current_time) |   System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $(get_num_of_avail_cores)"\\n
+    echo -ne " INFO  | $(get_current_time) |   Bash info: $(bash --version | head -n1 2>/dev/null)"\\n
+fi
+
+# Print all bash arguments used to start this script
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) |   Command used: $THIS_SCRIPT $(echo $@)"\\n
 fi
 
 ########################################################################
@@ -597,6 +652,10 @@ mdltstTyp=$OPT_B
 mdltstBin=$OPT_C
 outFilenm=$OPT_D
 
+if [ $vrbseBool -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) |   Type of Modeltesting selected: $mdltstTyp\n"
+fi
+
 # Define outfile namestem
 baseName=$(basename $nexusFile) # Using basename to strip off path
 filenStem=${baseName%.nex*} # Using parameter expansion to remove file extension
@@ -608,6 +667,7 @@ setsBlock=${filenStem}_NexusSetBlock
 unspltMtx=${filenStem}_UnsplitMatrix
 bestModls=${filenStem}_BestFitModels
 lsetDefns=${filenStem}_LsetDefinitns
+phylipFil=${filenStem}.phy
 
 # Checking input and output file availability
 check_inp_outp_availability $nexusFile $mdltstBin $outFilenm $get_current_time
@@ -629,9 +689,9 @@ reformat_nexus_file $nexusFile $tempFoldr/$reformNex
 # Extract charsets
 charSetsL=$(cat $tempFoldr/$reformNex | grep 'charset')
 # Extract number of characters in DNA matrix
-ncharVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*nchar=\([^;]*\).*/\1/p')
+ncharVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a semi-colon means that nchar has to come as last attribute (i.e., after ntax) in dimensions line.
 # Extract number of taxa
-ncharTax=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*ntax=\([^;]*\).*/\1/p')
+ntaxVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*ntax=\([^ ]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a space means that ntax has to come before nchar in dimensions line.
 
 ########################################################################
 
@@ -649,7 +709,7 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Confirming that partitions do not overlap\n"
 fi
 
-test_if_partitions_overlap $tempFoldr/$setsBlock
+test_if_partitions_overlap $tempFoldr $setsBlock
 
 ########################################################################
 
@@ -658,7 +718,7 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Ensuring that partitions form a continuous range\n"
 fi
 
-ensure_partitions_form_continuous_range $tempFoldr/$setsBlock $ncharVar
+ensure_partitions_form_continuous_range $tempFoldr $setsBlock $ncharVar
 
 ########################################################################
 
@@ -667,7 +727,7 @@ if [ $vrbseBool -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Splitting matrix into partitions\n"
 fi
 
-split_matrix_into_partitions $tempFoldr $tempFoldr/$dataBlock $tempFoldr/$setsBlock
+split_matrix_into_partitions $tempFoldr $dataBlock $setsBlock
 
 ########################################################################
 
@@ -677,9 +737,8 @@ if [ $vrbseBool -eq 1 ]; then
 fi
 
 if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    echo 0
-    #convert_datablock_to_phylip $option1 $option2
-    #write_partitionfinder_config_file $option1 $option2
+    convert_datablock_to_phylip $tempFoldr $dataBlock $ntaxVar $ncharVar $phylipFil
+    write_partitionfinder_config_file $tempFoldr $phylipFil "$charSetsL" $usrschemeBool
 fi
 
 ########################################################################
@@ -694,8 +753,7 @@ if [ "$mdltstTyp" = "jmodeltest" ]; then
 fi
 
 if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    echo 0
-    #modeltesting_via_partitionfinder2 $option1 $option2
+    modeltesting_via_partitionfinder2 $tempFoldr $mdltstBin
 fi
 
 ########################################################################
@@ -711,8 +769,7 @@ if [ "$mdltstTyp" = "jmodeltest" ]; then
 fi
 
 if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    echo 0
-    # extract_modelinfo_from_partitionfinder2 $option1 $option2
+    extract_modelinfo_from_partitionfinder2 $tempFoldr $bestModls
 fi
 
 ########################################################################
@@ -738,9 +795,12 @@ if [ "$mdltstTyp" = "jmodeltest" ]; then
 fi
 
 if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    echo 0
-    # assemble_mrbayes_block_from_partitionfinder2 $option1 $option2
+    assemble_mrbayes_block_from_partitionfinder2 $tempFoldr $outFilenm
 fi
+
+# Append future directions to outfile
+echo -e "\n[\nContinue with:\nmb -i $outFilenm\n]\n" >> $outFilenm
+
 
 ########################################################################
 
