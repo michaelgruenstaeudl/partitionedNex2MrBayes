@@ -60,7 +60,7 @@ function my_help {
     echo "Mandatory command line switches:"
     echo "${REV}-f${NORM}  --Sets file path to, and name of, ${BOLD}NEXUS file${NORM}. No default exists."
     echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of modeltesting software tool (available: jmodeltest, partitionfinder2). No default exists."
-    echo "${REV}-b${NORM}  --Sets file path to, and name of, the modeltesting${BOLD}binary or script${NORM}. No default exists."
+    echo "${REV}-b${NORM}  --Sets file path to, and name of, the modeltesting ${BOLD}binary or script${NORM}. No default exists."
     echo "${REV}-o${NORM}  --Sets file path to, and name of, ${BOLD}output file${NORM}. No default exists."
     echo "Optional command line switches:"
     echo "${REV}-u${NORM}  --Estimating model fit only for the ${BOLD}user-defined${NORM} partitioning scheme. Only applicable for PartitionFinder2. Default is ${BOLD}off${NORM}."
@@ -219,13 +219,15 @@ reformat_nexus_file()
     nexWoCmts=$(sed 's/\[[^]]*\]//g' $1)
     # Removes blank lines (both blank by whitespaces and by tabs)
     nexWoBlkL=$(echo "$nexWoCmts" | sed '/^\s*$/d')
+    # Removes leading whitespaces from every line (so that formatting (i.e., indets) does not matter)
+    nexWoLdWs=$(sed -e 's/^[ \t]*//' $1)
     # Standardizes critical command lines as lowercase (i.e., converts 
     # ENTIRE LINE that starts with a keyword TO LOWERCASE)
     # NOTE: These conversions to lowercase are critical for the correct 
     #       section identifikation below.
     # keyword1: "begin", line ends with semi-colon
     # NOTE: the following command converts "Begin Data;" to "begin data;", not just "begin"!
-    reformKw1=$(echo "$nexWoBlkL" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
+    reformKw1=$(echo "$nexWoLdWs" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
     # keyword2: "end;"
     reformKw2=$(echo "$reformKw1" | awk 'BEGIN{IGNORECASE=1} /^ *end\;/ {$0=tolower($0)} 1')
     # keyword3: "matrix"
@@ -667,7 +669,7 @@ setsBlock=${filenStem}_NexusSetBlock
 unspltMtx=${filenStem}_UnsplitMatrix
 bestModls=${filenStem}_BestFitModels
 lsetDefns=${filenStem}_LsetDefinitns
-phylipFil=${filenStem}.phy
+phylipFil=${filenStem}_PhylipFormatd # Bash string extension cannot handle dots (i.e., must be "myfile_phy" instead of "myfile.phy")
 
 # Checking input and output file availability
 check_inp_outp_availability $nexusFile $mdltstBin $outFilenm $get_current_time
