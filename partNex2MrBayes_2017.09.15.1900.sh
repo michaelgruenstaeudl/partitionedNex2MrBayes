@@ -674,7 +674,7 @@ check_inp_outp_availability $nexusFile $mdltstBin $outFilenm $get_current_time
 
 # Make temporary folder
 #tempFoldr=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
-tempFoldr=${filenStem}_${runtime_start_pp}_runFiles
+tempFoldr=${filenStem}_${mdltstTyp}_${runtime_start_pp}_runFiles
 mkdir -p $tempFoldr
 
 ########################################################################
