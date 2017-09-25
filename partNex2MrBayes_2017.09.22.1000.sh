@@ -521,11 +521,10 @@ extract_modelinfo_from_jmodeltest()
 #   INP:  $1: path to temp folder ($tempFoldr)
 #         $2: name of model overview file ($bestModls)
 #         $3: boolean variable if verbose or not ($vrbseBool)
-#         $4: function to get current time ($get_current_time)
 #   OUP:  writes output to model overview file
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
