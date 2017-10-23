@@ -7,18 +7,19 @@ THIS_SCRIPT=`basename ${BASH_SOURCE[0]}`
 AUTHOR="Michael Gruenstaeudl, PhD"
 #COPYRIGHT="Copyright (C) 2015-2017 $AUTHOR"
 #CONTACT="m.gruenstaeudl@fu-berlin.de"
-VERSION="2017.09.19.1800"
-USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -t <type_of_modeltesting_tool> -b <path_to_modeltesting_tool> -o <path_to_outfile>"
+VERSION="2017.10.23.1400"
+USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -c <path_to_config_file> -t <type_of_modeltesting_tool> -b <path_to_modeltesting_tool> -o <path_to_outfile>"
 
 ########################################################################
 
-#    The script converts a DNA alignment in NEXUS format that contains character set ("charset") definitions into a partitioned NEXUS file ready for analysis with MrBayes. The character sets (hereafter "partitions") are hereby extracted, passed to modeltesting with one of two different modeltesting software tools (jModelTest or PartitionFinder2) to identify the best-fitting model of nucleotide substitition and then concatenated again. Where necessary, the best-fitting nucleotide substitution models are converted to the specifications read by MrBayes. A command block for MrBayes is appended to the NEXUS file that integrates these partition definitions.
+#    The script converts a DNA alignment in NEXUS format that contains character set ("charset") definitions into a partitioned NEXUS file ready for analysis with MrBayes. The character sets (hereafter "partitions") are hereby extracted, passed to one of several software tools for modeltesting (jModelTest, SmartModelSelection, PartitionFinder, PartitionTest) to identify the best-fitting models of nucleotide substitition and then concatenated again. Where necessary, the best-fitting nucleotide substitution models are converted to the specifications read by MrBayes. A command block for MrBayes is appended to the NEXUS file that integrates these partition definitions.
 #    Several tests regarding the character set definitions are performed during the execution of the script. First, the script evaluates if the entire alignment is covered by partitions. If not, additional partitions are defined so that all partitions together form a continuous range from {1} to {total size of matrix}. Second, the script evaluates if any of the character definitions overlap with one another. If an overlap is detected, the script exists with an error. Consequently, the initial character set definitions of the NEXUS file do not need to cover the entire alignment length, but must not be overlapping.
 #    ARGS:
-#        input file:        file path to, and name of, the NEXUS input file
-#        modeltesting type: name of modeltesting tool used (available: jmodeltest, partitionfinder2)
-#        modeltesting tool: file path to, and name of, the modeltesting binary or script
-#        output file:       file path to, and name of, the output file
+#        input data file:   name of, and file path to, the input NEXUS file
+#        input config file: name of, and file path to, the input CONFIG file
+#        modeltesting type: name of modeltesting tool used (available: several ones)
+#        modeltesting tool: name of, and file path to, the modeltesting binary or script
+#        output file:       name of, and file path to, the output file
 #    OUTP:
 #        MRBAYES file:      a NEXUS file ready for analysis with MrBayes
 
@@ -26,6 +27,10 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -t <type_of_modeltesting_tool> 
 
 # TO DO:
 # [currently nothing]
+
+# PAPER: BMC Evol Biol. 2010 Aug 9;10:242. doi: 10.1186/1471-2148-10-242. Performance of criteria for selecting evolutionary models in phylogenetics: a comprehensive study based on simulated datasets. Luo A1, Qiao H, Zhang Y, Shi W, Ho SY, Xu W, Zhang A, Zhu C.
+# TELLS THAT BIC SHOULD BE USED FOR MODEL SELECTION.
+# 
 
 ########################################################################
 
@@ -35,17 +40,18 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -t <type_of_modeltesting_tool> 
 set -e
 
 # Start timing execution time
-runtime_start=$(date +%s)
-runtime_start_pp=$(date '+%Y.%m.%d.%H%M')
+RUNTIME_start=$(date +%s)
+RUNTIME_start_pp=$(date '+%Y.%m.%d.%H%M')
 
 # Initialize variables to default values
-OPT_A="file path to, and name of, the NEXUS input file"
-OPT_B="name of modeltesting software tool (available: jmodeltest, partitionfinder2)"
-OPT_C="file path to, and name of, the modeltesting binary or script"
-OPT_D="file path to, and name of, the output file"
-keepBool=0
-vrbseBool=0
-usrschemeBool=0
+OPT_A="name of, and file path to, the input NEXUS file"
+OPT_B="name of, and file path to, the input config file"
+OPT_C="name of modeltesting software tool (available: jmodeltest, partitionfinder)"
+OPT_D="name of, and file path to, the modeltesting binary or script"
+OPT_E="name of, and file path to, the output file"
+keepflsBOOL=0
+verboseBOOL=0
+usrschmBOOL=0
 
 # Set fonts for help function
 NORM=`tput sgr0`
@@ -57,13 +63,15 @@ function my_help {
     echo -e \\n"Help documentation for ${BOLD}$THIS_SCRIPT${NORM}."\\n
     echo -e "Version: $VERSION | Author: $AUTHOR"\\n
     echo -e "${REV}Usage:${NORM} $USAGE"\\n
-    echo "Mandatory command line switches:"
-    echo "${REV}-f${NORM}  --Sets file path to, and name of, ${BOLD}NEXUS file${NORM}. No default exists."
-    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of modeltesting software tool (available: jmodeltest, partitionfinder2). No default exists."
-    echo "${REV}-b${NORM}  --Sets file path to, and name of, the modeltesting ${BOLD}binary or script${NORM}. No default exists."
-    echo "${REV}-o${NORM}  --Sets file path to, and name of, ${BOLD}output file${NORM}. No default exists."
-    echo "Optional command line switches:"
-    echo "${REV}-u${NORM}  --Estimating model fit only for the ${BOLD}user-defined${NORM} partitioning scheme. Only applicable for PartitionFinder2. Default is ${BOLD}off${NORM}."
+    echo "MANDATORY command line switches:"
+    echo "${REV}-f${NORM}  --Sets name of, and file path to, ${BOLD}NEXUS file${NORM}. No default exists."
+    echo "${REV}-c${NORM}  --Sets name of, and file path to, ${BOLD}config file${NORM}. No default exists."
+    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of modeltesting software tool. No default exists."
+    echo "${REV}-b${NORM}  --Sets name of, and file path to, the modeltesting ${BOLD}binary or script${NORM}. No default exists."
+    echo "${REV}-o${NORM}  --Sets name of, and file path to, ${BOLD}output file${NORM}. No default exists."
+    echo ""
+    echo "OPTIONAL command line switches:"
+    echo "${REV}-u${NORM}  --Estimating model fit only for the ${BOLD}user-defined${NORM} partitioning scheme. Only applicable for PartitionFinder. Default is ${BOLD}off${NORM}."
     echo "${REV}-k${NORM}  --${BOLD}Keeps${NORM} temporary files. Default is ${BOLD}off${NORM}."
     echo "${REV}-v${NORM}  --Displays ${BOLD}verbose${NORM} status messages. Default is ${BOLD}off${NORM}."
     echo -e "${REV}-h${NORM}  --Displays this help message."\\n
@@ -80,23 +88,25 @@ fi
 
 # GETOPTS CODE
 
-while getopts :f:t:b:o:hukv FLAG; do
+while getopts :f:c:t:b:o:hukv FLAG; do
   case $FLAG in
     f)  OPT_A=$OPTARG
         ;;
-    t)  OPT_B=$OPTARG
+    c)  OPT_B=$OPTARG
         ;;
-    b)  OPT_C=$OPTARG
+    t)  OPT_C=$OPTARG
         ;;
-    o)  OPT_D=$OPTARG
+    b)  OPT_D=$OPTARG
+        ;;
+    o)  OPT_E=$OPTARG
         ;;
     h)  my_help
         ;;
-    u)  usrschemeBool=1
+    u)  usrschmBOOL=1
         ;;
-    k)  keepBool=1
+    k)  keepflsBOOL=1
         ;;
-    v)  vrbseBool=1
+    v)  verboseBOOL=1
         ;;
     \?) echo 'Invalid option: -$OPTARG' >&2
         exit 1
@@ -120,13 +130,14 @@ get_current_time() {
 
 check_inp_outp_availability()
 #   This function checks the availability of input and output files.
-#   INP:  $1: path and name of input: NEXUS file ($nexusFile)
-#         $1: path and name of input: modeltest binary/script ($mdltstBin)
-#         $3: path and name of output file ($outFilenm)
+#   INP:  $1: path and name of input: NEXUS file ($nexINFILE)
+#         $2: path and name of input: CONFIG file ($cfgINFILE)
+#         $3: path and name of input: modeltest binary/script ($BinMDLTST)
+#         $4: path and name of output file ($NamOTFILE)
 #   OUP:  none
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
@@ -135,18 +146,21 @@ check_inp_outp_availability()
     # Checking if input files exists
     #if [[ ! -f $1 ]]; then 
     if [ ! -f $1 ]; then 
-        echo -ne " ERROR | $(get_current_time) | Input file not found: $1\n"
+        echo -ne " ERROR | $(get_current_time) | NEXUS file not found: $1\n"
         exit 1
     fi
-    #if [[ ! -f $2 ]]; then 
     if [ ! -f $2 ]; then 
-        echo -ne " ERROR | $(get_current_time) | Modeltest binary/script file not found: $2\n"
+        echo -ne " ERROR | $(get_current_time) | Config file not found: $2\n"
+        exit 1
+    fi
+    if [ ! -f $3 ]; then 
+        echo -ne " ERROR | $(get_current_time) | Modeltest binary/script file not found: $3\n"
         exit 1
     fi
     # Check if outfile already exists
     #if [[ $3 = /* ]]; then # File is generated by GETOPTS, so checking its presence is not useful
-    if [ -f $3 ]; then
-        echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $3\n"
+    if [ -f $4 ]; then
+        echo -ne " ERROR | $(get_current_time) | Outfile already exists in filepath: $4\n"
         exit 1
     fi
 }
@@ -156,7 +170,7 @@ ensure_partitions_form_continuous_range()
 #   If the partitions don't form such a continuous range, additional
 #   ranges are inserted such that all ranges taken together form a 
 #   continuous range from {1} to {total size of matrix}.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of file containing the SETS-block
 #         $3: total size of matrix
 #   OUP:  update of $1
@@ -197,9 +211,9 @@ get_num_of_avail_cores()
 
 reconstitute_datablock_as_interleaved()
 #   This function reconstitutes a data block from individual partitions, but makes the data block interleaved.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of DATA-block ($dataBlock)
-#         $3: name of outfile ($outFilenm)
+#         $3: name of outfile ($NamOTFILE)
 #   OUP:  none; writes to outfile
 {
     # INTERNAL FUNCTION CHECKS
@@ -340,7 +354,7 @@ split_matrix_into_partitions()
 
 split_nexus_into_blocks()
 #   This function splits a NEXUS file into individual blocks.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of reformatted NEXUS file ($reformNex)
 #         $3: name of file containing the extracted DATA-block ($dataBlock)
 #         $4: name of file containing the extracted SETS-block ($setsBlock)
@@ -374,7 +388,7 @@ split_nexus_into_blocks()
 test_if_partitions_overlap()
 #   This function tests if any of the partitions (i.e., charset ranges)
 #   overlap. If they do, an error is thrown.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of file containing the SETS-block
 #   OUP:  none
 {
@@ -401,15 +415,16 @@ test_if_partitions_overlap()
 # FUNCTIONS SPECIFIC TO 'JMODELTEST'
 
 assemble_mrbayes_block_from_jmodeltest()
-#   This function appends a MrBayes block to a file ($outFilenm).
+#   This function appends a MrBayes block to a file ($NamOTFILE).
 #   INP:  $1: path to temp folder
 #         $2: name of outfile
 #         $3: name of lset definitions file
 #         $4: charsets variable
+#         $5: name of config file ($cfgINFILE)
 #   OUP:  none; operates on lset definitions file
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 5)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
@@ -426,7 +441,9 @@ assemble_mrbayes_block_from_jmodeltest()
     cat $1/$3 >> $2
     echo 'prset applyto=(all) ratepr=variable;' >> $2
     echo 'unlink statefreq=(all) revmat=(all) shape=(all) pinvar=(all) tratio=(all);' >> $2
-    echo -e '[mcmcp ngen=20000000 temp=0.1 samplefreq=10000;mcmc;]' >> $2
+    # USING CONFIG TEMPLATE
+    mcmcp_line=$(grep -A1 '^%MRBAYES:' $5 | tail -n1)
+    echo -e "$mcmcp_line" >> $2
     echo -e 'end;\n' >> $2
 }
 
@@ -518,9 +535,9 @@ convert_models_into_lset()
 
 extract_modelinfo_from_jmodeltest()
 #   This function extracts modelinfo from the output of jModeltest; the output was saved into logfiles ending with the name ".bestModel"
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of model overview file ($bestModls)
-#         $3: boolean variable if verbose or not ($vrbseBool)
+#         $3: boolean variable if verbose or not ($verboseBOOL)
 #   OUP:  writes output to model overview file
 {
     # INTERNAL FUNCTION CHECKS
@@ -530,20 +547,17 @@ extract_modelinfo_from_jmodeltest()
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    #count=`ls -1 $1/*.bestModel 2>/dev/null | wc -l`
     count=$(ls -1 $1/*.bestModel 2>/dev/null | wc -l)
-    #if [[ $count != 0 ]];
     if [ $count != 0 ];
     then
         for file in ./$1/*.bestModel; do 
             echo -ne "$(basename $file)" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> $1/$2
             bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed -n 's/.*Model \= \([^ ]*\).*/\1/p' 2>/dev/null) # Parse best model from jModeltest output
-            #if [[ ! -z "$bestModel" ]];
             if [ ! -z "$bestModel" ];
             then
                 echo " $bestModel" >> $1/$2  # NOTE: model has to be preceeded by one space!
             else
-                echo " GTR+I+G" >> $1/$2  # If error in modeltesting or parsing, set GTR+I+G as standard model
+                echo " GTR+I+G" >> $1/$2  # If error in modeltesting or parsing, set GTR+I+G as default model
                 if [ $3 -eq 1 ]; then
                     echo -ne " WARN  | $(get_current_time) | No model extracted from file $file; setting model GTR+I+G as replacement.\n"
                 fi
@@ -556,40 +570,36 @@ extract_modelinfo_from_jmodeltest()
 }
 
 modeltesting_via_jmodeltest()
-#   This function conducts modeltesting via jmodeltest for a series of input files; these input files start with the name "partition_"
-#   INP:  $1: path to temp folder ($tempFoldr)
-#         $2: name of jModeltest binary ($mdltstBin)
-#         $3: boolean variable if verbose or not ($vrbseBool)
+#   This function conducts modeltesting via jModeltest for a series of input files; these input files start with the name "partition_"
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of jModeltest binary ($BinMDLTST)
+#         $3: name of config file ($cfgINFILE)
+#         $4: boolean variable if verbose or not ($verboseBOOL)
 #   OUP:  none; generates *.bestModel* output files in temp folder
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received insufficient arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    #count=`ls -1 $1/partition_* 2>/dev/null | wc -l`
+    # USING CONFIG TEMPLATE
+    CMDline=$(grep -A1 '^%JMODELTEST:' $3 | tail -n1)
+    CMDline=$(echo $CMDline | sed -e "s/\[PATH_TO_JMODELTEST_JAR\]/\$2/")
+    CMDline=$(eval echo $CMDline)
+    # MODELTESTING
     count=$(ls -1 $1/partition_* 2>/dev/null | wc -l)
-    #if [[ $count != 0 ]];
     if [ $count != 0 ];
     then
         for file in ./$1/partition_*; do
-        partit_runtime_start=$(date +%s)
-        # java -jar $2 -tr $nmbrCores -d "$file" -f -i -g 4 -AIC -o ${file}.bestModel 2>${file}.bestModel.err
-        java -jar $2 -d "$file" -f -i -g 4 -AICc 1>${file}.bestModel 2>&1
-        # JMODELTEST OPTIONS SELECTED:
-        # -d sequenceFileName
-        # -f include models with unequals base frecuencies
-        # -i include models with a proportion invariable sites
-        # -AIC calculate the Akaike Information Criterion
-        # -g numberOfCategories: include models with rate variation among sites and number of categories
-        # (-tr numberOfThreads)  # NOTE: Option no longer used, because: By default, the total number of cores in the machine is used by jModelTest (see p. 11 of jModelTest 2 Manual v0.1.10).
-
-        partit_runtime_dur=$(bc -l <<< "($(date +%s)-$partit_runtime_start)/60")
-        LC_ALL=C partit_runtime_dur_pp=$(printf "%.3f minutes\n" $partit_runtime_dur)
-        if [ $3 -eq 1 ]; then
-            echo -ne " INFO  | $(get_current_time) |   Processing complete for partition: $(basename $file); Execution time: $partit_runtime_dur_pp\n"
+        partit_RUNTIME_start=$(date +%s)
+        main_cmd=$(echo $CMDline | sed -e "s|\[PARTITION\_NAME\]|$file|") # NOTE: The variable $file contains forwardslashes, so I have to use another delimiter with sed.
+        eval "$main_cmd 1>${file}.bestModel 2>&1" # Executin of main_cmd
+        partit_RUNTIME_dur=$(bc -l <<< "($(date +%s)-$partit_RUNTIME_start)/60")
+        LC_ALL=C partit_RUNTIME_dur_pp=$(printf "%.3f minutes\n" $partit_RUNTIME_dur)
+        if [ $4 -eq 1 ]; then
+            echo -ne " INFO  | $(get_current_time) |   Processing complete for partition: $(basename $file); Execution time: $partit_RUNTIME_dur_pp\n"
         fi
         done
     else
@@ -601,12 +611,12 @@ modeltesting_via_jmodeltest()
 ########################################################################
 ########################################################################
 
-# FUNCTIONS SPECIFIC TO 'PARTITIONFINDER2'
+# FUNCTIONS SPECIFIC TO 'PARTITIONFINDER'
 
-assemble_mrbayes_block_from_partitionfinder2()
+assemble_mrbayes_block_from_partitionfinder()
 #   This function ...
-#   INP:  $1: path to temp folder ($tempFoldr)
-#         $2: name of outfile ($outFilenm)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of outfile ($NamOTFILE)
 #   OUP:  append to the outfile
 {
     # INTERNAL FUNCTION CHECKS
@@ -621,7 +631,7 @@ assemble_mrbayes_block_from_partitionfinder2()
     kw2="end;"
     mrbayes_block=$(sed -n "/$kw1/,/$kw2/p" $pf2_bestscheme)
     if [ ! -z "$mrbayes_block" ]; then
-        echo "$mrbayes_block" >> $2 # NOTE: Append only! Also: $2 (i.e., outFilenm) does not reside in $1 (i.e., $tempFoldr)
+        echo "$mrbayes_block" >> $2 # NOTE: Append only! Also: $2 (i.e., NamOTFILE) does not reside in $1 (i.e., $tmpFOLDER)
     else
         echo -ne " ERROR | $(get_current_time) | Parsing of MRBAYES-block unsuccessful from file: $pf2_bestscheme\n"
         exit 1
@@ -630,7 +640,7 @@ assemble_mrbayes_block_from_partitionfinder2()
 
 convert_datablock_to_phylip()
 #   This function converts a NEXUS-formatted DATA-block to a PHYLIP-file.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: filename of DATA-block ($dataBlock)
 #         $3: number of taxa in DNA matrix ($ntaxVar)
 #         $4: number of characters in DNA matrix ($ncharVar)
@@ -653,9 +663,9 @@ convert_datablock_to_phylip()
     echo "$pureMatrx" >> $1/$5
 }
 
-extract_modelinfo_from_partitionfinder2()
+extract_modelinfo_from_partitionfinder()
 #   This function ...
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of model overview file ($bestModls)
 #   OUP:  writes the bestModls file to disk
 {
@@ -683,10 +693,10 @@ extract_modelinfo_from_partitionfinder2()
     fi
 }
 
-modeltesting_via_partitionfinder2()
-#   This function conducts modeltesting via PartitionFinder2
-#   INP:  $1: path to temp folder ($tempFoldr)
-#         $2: path to PartitionFinder2 Python script ($mdltstBin)
+modeltesting_via_partitionfinder()
+#   This function conducts modeltesting via PartitionFinder
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: path to PartitionFinder Python script ($BinMDLTST)
 #   OUP:  none; generates an output folder named 'analysis' in temp folder
 {
     # INTERNAL FUNCTION CHECKS
@@ -706,19 +716,19 @@ modeltesting_via_partitionfinder2()
     
     # Conduct modeltesting
     if [ -f "$1/partition_finder.cfg" ]; then
-        python2 $2 $1 1>$1/partitionfinder2_run.log 2>&1
+        python2 $2 $1 1>$1/partitionfinder_run.log 2>&1
     else
-        echo -ne " ERROR | $(get_current_time) | No PartitionFinder2 config file (partition_finder.cfg) found.\n"
+        echo -ne " ERROR | $(get_current_time) | No PartitionFinder config file (partition_finder.cfg) found.\n"
         exit 1
     fi
 }
 
 write_partitionfinder_config_file()
-#   This function generates a config file as required by PartitionFinder2.
-#   INP:  $1: path to temp folder ($tempFoldr)
+#   This function generates a config file as required by PartitionFinder.
+#   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of phylip-formatted file ($phylipFil)
 #         $3: multi-line string of charsets ($charSetsL)
-#         $4: boolean variable if userscheme only or not ($usrschemeBool)
+#         $4: boolean variable if userscheme only or not ($usrschmBOOL)
 #   OUP:  writes a phylip-formatted file to disk
 {
     # INTERNAL FUNCTION CHECKS
@@ -732,7 +742,7 @@ write_partitionfinder_config_file()
     echo -e "branchlengths = linked;\nmodels = mrbayes;\nmodel_selection = aicc;\n[data_blocks]" >> $1/partition_finder.cfg
     echo "$charSetsL" >> $1/partition_finder.cfg
     
-    # Setting userscheme-only search in PartitionFinder2 or not.
+    # Setting userscheme-only search in PartitionFinder or not.
     if [ $4 -eq 1 ]; then
         echo -ne " INFO  | $(get_current_time) | Estimating model fit of user-defined partition scheme only\n"
         echo -e "[schemes]\nsearch = user;\n" >> $1/partition_finder.cfg
@@ -747,40 +757,41 @@ write_partitionfinder_config_file()
 ########################################################################
 
 ## EVALUATING SYSTEM, BASH SHELL AND SCRIPT EXECUTION
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Evaluating system, bash shell and script execution"\\n
 fi
 
 # Print system details to log
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) |   System info: $(uname -sr 2>/dev/null), proc: $(uname -p 2>/dev/null), arch: $(uname -m 2>/dev/null), numcores: $(get_num_of_avail_cores)"\\n
     echo -ne " INFO  | $(get_current_time) |   Bash info: $(bash --version | head -n1 2>/dev/null)"\\n
 fi
 
 # Print all bash arguments used to start this script
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) |   Command used: $THIS_SCRIPT $(echo $@)"\\n
 fi
 
 ########################################################################
 
 ## CHECKING INFILES
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Checking infiles\n"
 fi
 
 # Renaming input variables
-nexusFile=$OPT_A
-mdltstTyp=$OPT_B
-mdltstBin=$OPT_C
-outFilenm=$OPT_D
+nexINFILE=$OPT_A
+cfgINFILE=$OPT_B
+typMDLTST=$OPT_C
+BinMDLTST=$OPT_D
+NamOTFILE=$OPT_E
 
-if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) |   Type of Modeltesting selected: $mdltstTyp\n"
+if [ $verboseBOOL -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) |   Type of Modeltesting selected: $typMDLTST\n"
 fi
 
 # Define outfile namestem
-baseName=$(basename $nexusFile) # Using basename to strip off path
+baseName=$(basename $nexINFILE) # Using basename to strip off path
 filenStem=${baseName%.nex*} # Using parameter expansion to remove file extension
 
 # Define outfile names
@@ -793,156 +804,156 @@ lsetDefns=${filenStem}_LsetDefinitns
 phylipFil=${filenStem}_PhylipFormatd # Bash string extension cannot handle dots (i.e., must be "myfile_phy" instead of "myfile.phy")
 
 # Checking input and output file availability
-check_inp_outp_availability $nexusFile $mdltstBin $outFilenm $get_current_time
+check_inp_outp_availability $nexINFILE $cfgINFILE $BinMDLTST $NamOTFILE $get_current_time
 
 # Make temporary folder
-#tempFoldr=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
-tempFoldr=${filenStem}_${mdltstTyp}_${runtime_start_pp}_runFiles
-mkdir -p $tempFoldr
+#tmpFOLDER=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
+tmpFOLDER=${filenStem}_${typMDLTST}_${RUNTIME_start_pp}_runFiles
+mkdir -p $tmpFOLDER
 
 ########################################################################
 
 ## RE-FORMATTING INPUT NEXUS FILE
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Re-formatting input NEXUS file\n"
 fi
 
-reformat_nexus_file $nexusFile $tempFoldr/$reformNex
+reformat_nexus_file $nexINFILE $tmpFOLDER/$reformNex
 
 # Extract charsets
-charSetsL=$(cat $tempFoldr/$reformNex | grep 'charset')
+charSetsL=$(cat $tmpFOLDER/$reformNex | grep 'charset')
 # Extract number of characters in DNA matrix
-ncharVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a semi-colon means that nchar has to come as last attribute (i.e., after ntax) in dimensions line.
+ncharVar=$(grep ^dimensions $tmpFOLDER/$reformNex | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a semi-colon means that nchar has to come as last attribute (i.e., after ntax) in dimensions line.
 # Extract number of taxa
-ntaxVar=$(grep ^dimensions $tempFoldr/$reformNex | sed -n 's/.*ntax=\([^ ]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a space means that ntax has to come before nchar in dimensions line.
+ntaxVar=$(grep ^dimensions $tmpFOLDER/$reformNex | sed -n 's/.*ntax=\([^ ]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a space means that ntax has to come before nchar in dimensions line.
 
 ########################################################################
 
 ## SPLITTING NEXUS FILE INTO BLOCKS
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Splitting NEXUS file into blocks\n"
 fi
 
-split_nexus_into_blocks $tempFoldr $reformNex $dataBlock $setsBlock
+split_nexus_into_blocks $tmpFOLDER $reformNex $dataBlock $setsBlock
 
 ########################################################################
 
 ## CONFIRMING THAT PARTITIONS DO NOT OVERLAP
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Confirming that partitions do not overlap\n"
 fi
 
-test_if_partitions_overlap $tempFoldr $setsBlock
+test_if_partitions_overlap $tmpFOLDER $setsBlock
 
 ########################################################################
 
 ## ENSURING THAT PARTITIONS FORM A CONTINUOUS RANGE
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Ensuring that partitions form a continuous range\n"
 fi
 
-ensure_partitions_form_continuous_range $tempFoldr $setsBlock $ncharVar
+ensure_partitions_form_continuous_range $tmpFOLDER $setsBlock $ncharVar
 
 ########################################################################
 
 ## SPLITTING MATRIX INTO PARTITIONS
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Splitting matrix into partitions\n"
 fi
 
-split_matrix_into_partitions $tempFoldr $dataBlock $setsBlock
+split_matrix_into_partitions $tmpFOLDER $dataBlock $setsBlock
 
 ########################################################################
 
 ## PREPARING FILES FOR MODELTESTING
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Preparing files for modeltesting\n"
 fi
 
-if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    convert_datablock_to_phylip $tempFoldr $dataBlock $ntaxVar $ncharVar $phylipFil
-    write_partitionfinder_config_file $tempFoldr $phylipFil "$charSetsL" $usrschemeBool
+if [ "$typMDLTST" = "partitionfinder" ]; then
+    convert_datablock_to_phylip $tmpFOLDER $dataBlock $ntaxVar $ncharVar $phylipFil
+    write_partitionfinder_config_file $tmpFOLDER $phylipFil "$charSetsL" $usrschmBOOL
 fi
 
 ########################################################################
 
 ## CONDUCTING MODELTESTING
-if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Conducting modeltesting via: $mdltstTyp\n"
+if [ $verboseBOOL -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Conducting modeltesting via: $typMDLTST\n"
 fi
 
-if [ "$mdltstTyp" = "jmodeltest" ]; then
-    modeltesting_via_jmodeltest $tempFoldr $mdltstBin $vrbseBool
+if [ "$typMDLTST" = "jmodeltest" ]; then
+    modeltesting_via_jmodeltest $tmpFOLDER $BinMDLTST $cfgINFILE $verboseBOOL
 fi
 
-if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    modeltesting_via_partitionfinder2 $tempFoldr $mdltstBin
+if [ "$typMDLTST" = "partitionfinder" ]; then
+    modeltesting_via_partitionfinder $tmpFOLDER $BinMDLTST
 fi
 
 ########################################################################
 
 ## EXTRACTING INFORMATION FROM MODELTESTING RESULTS
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Extracting information from modeltesting results\n"
 fi
 
-if [ "$mdltstTyp" = "jmodeltest" ]; then
-    extract_modelinfo_from_jmodeltest $tempFoldr $bestModls $vrbseBool
-    convert_models_into_lset $tempFoldr $bestModls $lsetDefns "$charSetsL"  # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
+if [ "$typMDLTST" = "jmodeltest" ]; then
+    extract_modelinfo_from_jmodeltest $tmpFOLDER $bestModls $verboseBOOL
+    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns "$charSetsL"  # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
 fi
 
-if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    extract_modelinfo_from_partitionfinder2 $tempFoldr $bestModls
+if [ "$typMDLTST" = "partitionfinder" ]; then
+    extract_modelinfo_from_partitionfinder $tmpFOLDER $bestModls
 fi
 
 ########################################################################
 
 ## ASSEMBLING OUTPUT FILE
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Assembling output file\n"
 fi
 
-echo -e "#NEXUS\n" > $outFilenm
+echo -e "#NEXUS\n" > $NamOTFILE
 
 # Reconstitute DATA-block as interleaved
-reconstitute_datablock_as_interleaved $tempFoldr $dataBlock $outFilenm 
+reconstitute_datablock_as_interleaved $tmpFOLDER $dataBlock $NamOTFILE 
 
 # Append the SETS-block, which is commented out
-echo -e "\n[\n$(cat $tempFoldr/$setsBlock)\n]\n" >> $outFilenm
+echo -e "\n[\n$(cat $tmpFOLDER/$setsBlock)\n]\n" >> $NamOTFILE
 
 # Append info on best-fitting models
-echo -e "\n[\nBest-fitting models identified:\n$(cat $tempFoldr/$bestModls)\n]\n" >> $outFilenm
+echo -e "\n[\nBest-fitting models identified:\n$(cat $tmpFOLDER/$bestModls)\n]\n" >> $NamOTFILE
 
-if [ "$mdltstTyp" = "jmodeltest" ]; then
-    assemble_mrbayes_block_from_jmodeltest $tempFoldr $outFilenm $lsetDefns "$charSetsL"  # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
+if [ "$typMDLTST" = "jmodeltest" ]; then
+    assemble_mrbayes_block_from_jmodeltest $tmpFOLDER $NamOTFILE $lsetDefns "$charSetsL"  $cfgINFILE # NOTE: $charSetsL is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
 fi
 
-if [ "$mdltstTyp" = "partitionfinder2" ]; then
-    assemble_mrbayes_block_from_partitionfinder2 $tempFoldr $outFilenm
+if [ "$typMDLTST" = "partitionfinder" ]; then
+    assemble_mrbayes_block_from_partitionfinder $tmpFOLDER $NamOTFILE
 fi
 
 # Append future directions to outfile
-echo -e "\n[\nContinue with:\nmb -i $outFilenm\n]\n" >> $outFilenm
+echo -e "\n[\nContinue with:\nmb -i $NamOTFILE\n]\n" >> $NamOTFILE
 
 
 ########################################################################
 
 ## CLEANING UP THE WORK DIRECTORY
-if [ $vrbseBool -eq 1 ]; then
+if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Cleaning up\n"
 fi
 
-if [ $keepBool -eq 0 ]; then
-    rm -r $tempFoldr
+if [ $keepflsBOOL -eq 0 ]; then
+    rm -r $tmpFOLDER
 fi
 
 # Stop timing execution time
-runtime_dur=$(bc -l <<< "($(date +%s)-$runtime_start)/60")
-LC_ALL=C runtime_dur_pp=$(printf "%.3f minutes\n" $runtime_dur)  # NOTE: "LC_ALL=C" is important due to different locales (German comma vs. world's decimal point)
+RUNTIME_dur=$(bc -l <<< "($(date +%s)-$RUNTIME_start)/60")
+LC_ALL=C RUNTIME_dur_pp=$(printf "%.3f minutes\n" $RUNTIME_dur)  # NOTE: "LC_ALL=C" is important due to different locales (German comma vs. world's decimal point)
 
 # End of file message
-if [ $vrbseBool -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Processing complete for file: $nexusFile; Execution time: $runtime_dur_pp\n"
+if [ $verboseBOOL -eq 1 ]; then
+    echo -ne " INFO  | $(get_current_time) | Processing complete for file: $nexINFILE; Execution time: $RUNTIME_dur_pp\n"
 fi
 
 ########################################################################
