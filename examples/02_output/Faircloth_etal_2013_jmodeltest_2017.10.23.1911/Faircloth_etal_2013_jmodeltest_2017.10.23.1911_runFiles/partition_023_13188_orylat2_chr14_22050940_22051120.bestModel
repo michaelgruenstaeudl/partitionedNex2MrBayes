@@ -1,0 +1,577 @@
+[MPI] Testing MPI environment... (BGBM14856)
+[MPI] Proceed without MPI
+-------------------------- jModeltest 2.1.7 v20150220 --------------------------
+(c) 2011-onwards D. Darriba, G.L. Taboada, R. Doallo and D. Posada,
+(1) Department of Biochemistry, Genetics and Immunology
+    University of Vigo, 36310 Vigo, Spain.
+(2) Department of Electronics and Systems
+    University of A Coruna, 15071 A Coruna, Spain.
+e-mail: ddarriba@udc.es, dposada@uvigo.es
+--------------------------------------------------------------------------------
+ 
+Mon Oct 23 19:50:57 CEST 2017
+Linux 4.13.4-1-ARCH, arch: amd64, bits: 64, numcores: 4
+ 
+--------------------------------------------------------------------------------
+Citation: Darriba D, Taboada GL, Doallo R and Posada D. 2012.
+          "jModelTest 2: more models, new heuristics and parallel computing".
+          Nature Methods 9(8), 772.
+--------------------------------------------------------------------------------
+ 
+jModelTest 2.1.7 v20150220
+Copyright (C) 2011 D. Darriba, G.L. Taboada, R. Doallo and D. Posada
+This program comes with ABSOLUTELY NO WARRANTY
+This is free software, and you are welcome to redistribute it under certain conditions
+ 
+Notice: This program may contain errors. Please inspect results carefully.
+ 
+ 
+Arguments = -d ./Faircloth_etal_2013_jmodeltest_2017.10.23.1911_runFiles/partition_023_13188_orylat2_chr14_22050940_22051120 -f -i -g 4 -AIC
+
+Reading data file "partition_023_13188_orylat2_chr14_22050940_22051120"... OK.
+  number of sequences: 27
+  number of sites: 210
+ 
+ 
+---------------------------------------------------------------
+*                                                             *
+*        COMPUTATION OF LIKELIHOOD SCORES WITH PHYML          *
+*                                                             *
+---------------------------------------------------------------
+ 
+::Settings::
+ 
+ Phyml version = 3.0
+ Phyml binary = PhyML_3.0_linux64
+ Phyml path = /home/michael_science/binaries/jModelTest_2.1.7/exe/phyml/
+ Candidate models = 24
+   number of substitution schemes = 3
+   including models with equal/unequal base frequencies (+F)
+   including models with/without a proportion of invariable sites (+I)
+   including models with/without rate variation among sites (+G) (nCat = 4)
+ Optimized free parameters (K) = substitution parameters + 51 branch lengths + topology 
+ Base tree for likelihood calculations = ML tree
+ Tree topology search operation = BEST
+ 
+ 
+ 
+::Progress::
+ 
+Model 		 Exec. Time 	 Total Time 	 -lnL
+-------------------------------------------------------------------------
+JC+I+G		00h:00:25:00	00h:00:25:00	    1342.1348	 (1/24)
+F81+I+G		00h:00:29:05	00h:00:29:05	    1282.0535	 (2/24)
+GTR+I+G		00h:00:43:01	00h:00:43:01	    1231.7449	 (3/24)
+HKY+I+G		00h:00:52:03	00h:00:52:03	    1236.9281	 (4/24)
+K80+I+G		00h:00:28:07	00h:00:53:07	    1280.2438	 (5/24)
+F81+G		00h:00:19:06	00h:01:02:07	    1282.0536	 (6/24)
+SYM+I+G		00h:00:35:01	00h:01:04:05	    1266.0202	 (7/24)
+HKY+G		00h:00:26:02	00h:01:18:05	    1236.9285	 (8/24)
+JC+G		00h:00:16:05	00h:01:19:02	    1341.6630	 (9/24)
+GTR+G		00h:00:28:08	00h:01:22:05	    1231.7450	 (10/24)
+K80+G		00h:00:18:07	00h:01:23:03	    1280.2440	 (11/24)
+F81+I		00h:00:08:08	00h:01:28:00	    1300.7160	 (12/24)
+HKY+I		00h:00:07:05	00h:01:30:01	    1249.7174	 (13/24)
+GTR+I		00h:00:07:04	00h:01:30:07	    1243.9752	 (14/24)
+JC+I		00h:00:06:05	00h:01:34:06	    1349.4185	 (15/24)
+K80+I		00h:00:07:06	00h:01:37:07	    1292.4057	 (16/24)
+SYM+I		00h:00:07:04	00h:01:38:01	    1273.4712	 (17/24)
+F81		00h:00:07:07	00h:01:42:03	    1326.5518	 (18/24)
+SYM+G		00h:00:24:05	00h:01:43:01	    1266.0764	 (19/24)
+GTR		00h:00:06:09	00h:01:45:00	    1273.0136	 (20/24)
+HKY		00h:00:08:02	00h:01:45:08	    1278.6294	 (21/24)
+JC		00h:00:05:07	00h:01:48:00	    1371.6840	 (22/24)
+K80		00h:00:05:07	00h:01:48:08	    1312.9802	 (23/24)
+SYM		00h:00:06:08	00h:01:51:08	    1296.1628	 (24/24)
+ 
+   Model = JC
+   partition = 000000
+   -lnL = 1371.6840
+   K = 52 
+ 
+   Model = JC+I
+   partition = 000000
+   -lnL = 1349.4185
+   K = 53
+   p-inv = 0.2950 
+ 
+   Model = JC+G
+   partition = 000000
+   -lnL = 1341.6630
+   K = 53
+   gamma shape = 0.8550 
+ 
+   Model = JC+I+G
+   partition = 000000
+   -lnL = 1342.1348
+   K = 54
+   p-inv = 0.0020
+   gamma shape = 0.8440 
+ 
+   Model = F81
+   partition = 000000
+   -lnL = 1326.5518
+   K = 55
+   freqA = 0.1438 
+   freqC = 0.2877 
+   freqG = 0.1429 
+   freqT = 0.4255  
+ 
+   Model = F81+I
+   partition = 000000
+   -lnL = 1300.7160
+   K = 56
+   freqA = 0.1433 
+   freqC = 0.2769 
+   freqG = 0.1354 
+   freqT = 0.4444 
+   p-inv = 0.3000 
+ 
+   Model = F81+G
+   partition = 000000
+   -lnL = 1282.0536
+   K = 56
+   freqA = 0.1293 
+   freqC = 0.2673 
+   freqG = 0.1233 
+   freqT = 0.4800 
+   gamma shape = 0.5900 
+ 
+   Model = F81+I+G
+   partition = 000000
+   -lnL = 1282.0535
+   K = 57
+   freqA = 0.1293 
+   freqC = 0.2673 
+   freqG = 0.1233 
+   freqT = 0.4801 
+   p-inv = 0.0000
+   gamma shape = 0.5890 
+ 
+   Model = K80
+   partition = 010010
+   -lnL = 1312.9802
+   K = 53
+   kappa = 4.7713 (ti/tv = 2.3857) 
+ 
+   Model = K80+I
+   partition = 010010
+   -lnL = 1292.4057
+   K = 54
+   kappa = 4.7892 (ti/tv = 2.3946)
+   p-inv = 0.2990 
+ 
+   Model = K80+G
+   partition = 010010
+   -lnL = 1280.2440
+   K = 54
+   kappa = 5.4565 (ti/tv = 2.7282)
+   gamma shape = 0.7790 
+ 
+   Model = K80+I+G
+   partition = 010010
+   -lnL = 1280.2438
+   K = 55
+   kappa = 5.4615 (ti/tv = 2.7308)
+   p-inv = 0.0000
+   gamma shape = 0.7790 
+ 
+   Model = HKY
+   partition = 010010
+   -lnL = 1278.6294
+   K = 56
+   freqA = 0.1631 
+   freqC = 0.2524 
+   freqG = 0.1560 
+   freqT = 0.4284 
+   kappa = 4.2443 (ti/tv = 2.6094) 
+ 
+   Model = HKY+I
+   partition = 010010
+   -lnL = 1249.7174
+   K = 57
+   freqA = 0.1674 
+   freqC = 0.2324 
+   freqG = 0.1436 
+   freqT = 0.4566 
+   kappa = 4.9129 (ti/tv = 2.9838)
+   p-inv = 0.3100 
+ 
+   Model = HKY+G
+   partition = 010010
+   -lnL = 1236.9285
+   K = 57
+   freqA = 0.1615 
+   freqC = 0.2171 
+   freqG = 0.1424 
+   freqT = 0.4791 
+   kappa = 5.3402 (ti/tv = 3.2063)
+   gamma shape = 0.5860 
+ 
+   Model = HKY+I+G
+   partition = 010010
+   -lnL = 1236.9281
+   K = 58
+   freqA = 0.1614 
+   freqC = 0.2171 
+   freqG = 0.1423 
+   freqT = 0.4792 
+   kappa = 5.3460 (ti/tv = 3.2103)
+   p-inv = 0.0020
+   gamma shape = 0.5880 
+ 
+   Model = SYM
+   partition = 012345
+   -lnL = 1296.1628
+   K = 57
+   R(a) [AC] =  1.5362
+   R(b) [AG] =  2.7736
+   R(c) [AT] =  1.6479
+   R(d) [CG] =  0.5615
+   R(e) [CT] =  7.6083
+   R(f) [GT] =  1.0000 
+ 
+   Model = SYM+I
+   partition = 012345
+   -lnL = 1273.4712
+   K = 58
+   R(a) [AC] =  1.6129
+   R(b) [AG] =  2.6649
+   R(c) [AT] =  1.5618
+   R(d) [CG] =  0.6150
+   R(e) [CT] =  8.6701
+   R(f) [GT] =  1.0000
+   p-inv = 0.2800 
+ 
+   Model = SYM+G
+   partition = 012345
+   -lnL = 1266.0764
+   K = 58
+   R(a) [AC] =  1.6653
+   R(b) [AG] =  2.8995
+   R(c) [AT] =  1.6421
+   R(d) [CG] =  0.6327
+   R(e) [CT] =  9.8129
+   R(f) [GT] =  1.0000
+   gamma shape = 0.8190 
+ 
+   Model = SYM+I+G
+   partition = 012345
+   -lnL = 1266.0202
+   K = 59
+   R(a) [AC] =  1.6638
+   R(b) [AG] =  2.8800
+   R(c) [AT] =  1.6350
+   R(d) [CG] =  0.6306
+   R(e) [CT] =  9.8051
+   R(f) [GT] =  1.0000
+   p-inv = 0.0750
+   gamma shape = 1.0290 
+ 
+   Model = GTR
+   partition = 012345
+   -lnL = 1273.0136
+   K = 60
+   freqA = 0.1645 
+   freqC = 0.2372 
+   freqG = 0.1867 
+   freqT = 0.4116 
+   R(a) [AC] =  1.9678
+   R(b) [AG] =  4.0393
+   R(c) [AT] =  1.8004
+   R(d) [CG] =  0.7002
+   R(e) [CT] =  6.7584
+   R(f) [GT] =  1.0000 
+ 
+   Model = GTR+I
+   partition = 012345
+   -lnL = 1243.9752
+   K = 61
+   freqA = 0.1727 
+   freqC = 0.2079 
+   freqG = 0.1804 
+   freqT = 0.4390 
+   R(a) [AC] =  2.3940
+   R(b) [AG] =  4.1121
+   R(c) [AT] =  1.4664
+   R(d) [CG] =  0.8460
+   R(e) [CT] =  8.8103
+   R(f) [GT] =  1.0000
+   p-inv = 0.2930 
+ 
+   Model = GTR+G
+   partition = 012345
+   -lnL = 1231.7450
+   K = 61
+   freqA = 0.1583 
+   freqC = 0.1934 
+   freqG = 0.1776 
+   freqT = 0.4708 
+   R(a) [AC] =  3.9276
+   R(b) [AG] =  6.4401
+   R(c) [AT] =  1.8754
+   R(d) [CG] =  1.3976
+   R(e) [CT] =  13.0650
+   R(f) [GT] =  1.0000
+   gamma shape = 0.5920 
+ 
+   Model = GTR+I+G
+   partition = 012345
+   -lnL = 1231.7449
+   K = 62
+   freqA = 0.1583 
+   freqC = 0.1934 
+   freqG = 0.1775 
+   freqT = 0.4708 
+   R(a) [AC] =  3.9307
+   R(b) [AG] =  6.4459
+   R(c) [AT] =  1.8749
+   R(d) [CG] =  1.3992
+   R(e) [CT] =  13.0782
+   R(f) [GT] =  1.0000
+   p-inv = 0.0000
+   gamma shape = 0.5920 
+ 
+  Best-fit models should be reoptimized for comparison with unconstrained likelihood
+ 
+Computation of likelihood scores completed. It took 00h:01:51:08.
+ 
+
+
+
+---------------------------------------------------------------
+*                                                             *
+*             AKAIKE INFORMATION CRITERION (AIC)              *
+*                                                             *
+---------------------------------------------------------------
+ 
+ Model selected: 
+   Model = GTR+G
+   partition = 012345
+   -lnL = 1231.7450
+   K = 61
+   freqA = 0.1583 
+   freqC = 0.1934 
+   freqG = 0.1776 
+   freqT = 0.4708 
+   R(a) [AC] =  3.9276
+   R(b) [AG] =  6.4401
+   R(c) [AT] =  1.8754
+   R(d) [CG] =  1.3976
+   R(e) [CT] =  13.0650
+   R(f) [GT] =  1.0000
+   gamma shape = 0.5920 
+ 
+Tree for the best AIC model = ((acanthurus_japonicus:3.86416703,amia_calva:0.04306710):0.06184027,lepisosteus_oculatus:0.18805678,((strophidon_sathete:0.19379049,(osteoglossum_bicirrhosum:0.17563623,(pantodon_buchholzi:0.05484608,megalops_sp:5.94302088):0.06778803):0.07683100):0.03821443,(antennarius_striatus:3.81966002,(((polypterus_senegalus:3.55240014,(salvelinus_fontinalis:0.00000001,umbra_limi:0.10254872):0.02779106):0.05564018,(astyanax_fasciatus:0.11203301,(danio_rerio:0.10394852,(anchoa_compressa:0.10416999,acipenser_fulvescens:9.61574069):0.04868898):0.03082751):0.02075239):0.03216283,((lampris_guttatus:0.05797938,taenianotus_triacanthus:0.04916110):0.03988430,((gasterosteus_aculeatus:0.01072711,(neolamprologus_brichardi:0.00000001,(pundamilia_nyererei:0.00000001,(haplochromis_burtoni:0.00000061,(oreochromis_niloticus:0.00000035,takifugu_rupribes:0.04947838):0.00000035):0.00000061):0.00000001):0.02806955):0.02858760,(gadus_morhua:0.03256686,(oryzias_latipes:0.02521395,(diaphus_theta:0.02720440,tetraodon_nigroviridis:0.25895095):0.03164805):0.02065258):0.02198301):0.00311825):0.02466310):0.04139825):0.05045392):0.35603776);
+ 
+ 
+* AIC MODEL SELECTION : Selection uncertainty
+ 
+Model             -lnL    K      AIC       delta       weight   cumWeight
+------------------------------------------------------------------------- 
+GTR+G       1231.74498   61  2585.489960   0.000000    0.559652   0.559652 
+GTR+I+G     1231.74487   62  2587.489740   1.999780    0.205907   0.765559 
+HKY+G       1236.92846   57  2587.856920   2.366960    0.171372   0.936931 
+HKY+I+G     1236.92811   58  2589.856220   4.366260    0.063066   0.999997 
+GTR+I       1243.97518   61  2609.950360  24.460400   2.73e-006   1.000000 
+HKY+I       1249.71738   57  2613.434760  27.944800   4.78e-007   1.000000 
+SYM+G       1266.07644   58  2648.152880  62.662920   1.38e-014   1.000000 
+SYM+I+G     1266.02018   59  2650.040360  64.550400   5.38e-015   1.000000 
+SYM+I       1273.47117   58  2662.942340  77.452380   8.50e-018   1.000000 
+GTR         1273.01357   60  2666.027140  80.537180   1.82e-018   1.000000 
+K80+G       1280.24399   54  2668.487980  82.998020   5.31e-019   1.000000 
+HKY         1278.62944   56  2669.258880  83.768920   3.61e-019   1.000000 
+K80+I+G     1280.24376   55  2670.487520  84.997560   1.95e-019   1.000000 
+F81+G       1282.05362   56  2676.107240  90.617280   1.18e-020   1.000000 
+F81+I+G     1282.05354   57  2678.107080  92.617120   4.33e-021   1.000000 
+K80+I       1292.40568   54  2692.811360  107.321400   2.78e-024   1.000000 
+SYM         1296.16276   57  2706.325520  120.835560   3.23e-027   1.000000 
+F81+I       1300.71596   56  2713.431920  127.941960   9.24e-029   1.000000 
+K80         1312.98022   53  2731.960440  146.470480   8.76e-033   1.000000 
+F81         1326.55183   55  2763.103660  177.613700   1.51e-039   1.000000 
+JC+G        1341.66301   53  2789.326020  203.836060   3.06e-045   1.000000 
+JC+I+G      1342.13476   54  2792.269520  206.779560   7.02e-046   1.000000 
+JC+I        1349.41853   53  2804.837060  219.347100   1.31e-048   1.000000 
+JC          1371.68398   52  2847.367960  261.878000   7.62e-058   1.000000
+-------------------------------------------------------------------------
+-lnL:	negative log likelihod
+ K:	number of estimated parameters
+ AIC:	Akaike Information Criterion
+ delta:	AIC difference
+ weight:	AIC weight
+ cumWeight:	cumulative AIC weight
+ 
+ 
+* AIC MODEL SELECTION : Confidence interval
+ 
+There are 24 models in the 100% confidence interval: [ GTR+G GTR+I+G HKY+G HKY+I+G GTR+I HKY+I SYM+G SYM+I+G SYM+I GTR K80+G HKY K80+I+G F81+G F81+I+G K80+I SYM F81+I K80 F81 JC+G JC+I+G JC+I JC ] 
+ 
+ 
+* AIC MODEL SELECTION : Best Model's command line
+ 
+phyml  -i /tmp/jmodeltest7523099357114144361.phy -d nt -n 1 -b 0 --run_id GTR+G -m 012345 -f m -c 4 -a e --no_memory_check -o tlr -s BEST
+ 
+ 
+ 
+---------------------------------------------------------------
+*                                                             *
+*                    SELECTION SUMMARY                        *
+*                                                             *
+---------------------------------------------------------------
+
+::Optimized Topologies Summary::
+
+There are 24 different topologies.
+
+Topology Id: 1
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  1	 55.97%		  0	0.00e+00	0.00e+00
+Models supporting:   1
+                     GTR+G 
+
+Topology Id: 2
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  2	 20.59%		 22	1.50e+01	0.00e+00
+Models supporting:   1
+                     GTR+I+G 
+
+Topology Id: 3
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  3	  0.00%		 26	1.36e+01	0.00e+00
+Models supporting:   1
+                     K80+G 
+
+Topology Id: 4
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  4	  0.00%		 26	1.87e+01	0.00e+00
+Models supporting:   1
+                     K80+I+G 
+
+Topology Id: 5
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  5	  0.00%		 28	1.67e+01	0.00e+00
+Models supporting:   1
+                     F81+I+G 
+
+Topology Id: 6
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  6	 17.14%		 28	1.23e+01	0.00e+00
+Models supporting:   1
+                     HKY+G 
+
+Topology Id: 7
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  7	  0.00%		 28	1.29e+01	0.00e+00
+Models supporting:   1
+                     SYM 
+
+Topology Id: 8
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  8	  0.00%		 28	1.50e+01	0.00e+00
+Models supporting:   1
+                     GTR 
+
+Topology Id: 9
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	  9	  6.31%		 30	1.30e+01	0.00e+00
+Models supporting:   1
+                     HKY+I+G 
+
+Topology Id: 10
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 10	  0.00%		 30	1.35e+01	0.00e+00
+Models supporting:   1
+                     SYM+I 
+
+Topology Id: 11
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 11	  0.00%		 30	1.30e+01	0.00e+00
+Models supporting:   1
+                     SYM+G 
+
+Topology Id: 12
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 12	  0.00%		 34	1.35e+01	0.00e+00
+Models supporting:   1
+                     HKY 
+
+Topology Id: 13
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 13	  0.00%		 36	1.30e+01	0.00e+00
+Models supporting:   1
+                     JC+I 
+
+Topology Id: 14
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 14	  0.00%		 36	1.35e+01	0.00e+00
+Models supporting:   1
+                     JC+G 
+
+Topology Id: 15
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 15	  0.00%		 36	1.21e+01	0.00e+00
+Models supporting:   1
+                     JC+I+G 
+
+Topology Id: 16
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 16	  0.00%		 36	1.35e+01	0.00e+00
+Models supporting:   1
+                     F81 
+
+Topology Id: 17
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 17	  0.00%		 36	1.29e+01	0.00e+00
+Models supporting:   1
+                     F81+G 
+
+Topology Id: 18
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 18	  0.00%		 36	1.30e+01	0.00e+00
+Models supporting:   1
+                     K80 
+
+Topology Id: 19
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 19	  0.00%		 38	1.30e+01	0.00e+00
+Models supporting:   1
+                     JC 
+
+Topology Id: 20
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 20	  0.00%		 40	1.50e+01	0.00e+00
+Models supporting:   1
+                     GTR+I 
+
+Topology Id: 21
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 21	  0.00%		 44	1.25e+01	0.00e+00
+Models supporting:   1
+                     F81+I 
+
+Topology Id: 22
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 22	  0.00%		 44	1.33e+01	0.00e+00
+Models supporting:   1
+                     K80+I 
+
+Topology Id: 23
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 23	  0.00%		 44	1.32e+01	0.00e+00
+Models supporting:   1
+                     HKY+I 
+
+Topology Id: 24
+	Rank	Weight		 RF	AvgEucl		VarEucl
+AIC	 24	  0.00%		 44	1.60e+01	0.00e+00
+Models supporting:   1
+                     SYM+I+G 
+
+ 
+ 
+ 
+::Best Models::
+ 
+	Model 		f(a) 	f(c) 	f(g) 	f(t) 	kappa 	titv 	Ra	Rb	Rc	Rd	Re	Rf	pInv 	gamma
+----------------------------------------------------------------------------------------------------------------------------------------
+AIC 	GTR+G		0.16	0.19	0.18	0.47	0.00	0.00	  3.928   6.440   1.875   1.398  13.065   1.000 N/A	   0.59

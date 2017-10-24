@@ -1,12 +1,12 @@
 ### ! RUN THIS SCRIPT IN THE FOLDER WITH THE INFILE ! ###
 
 #INFILE=Leache_etal_2015.nex
-#INFILE=Faircloth_etal_2013.nex
+INFILE=Faircloth_etal_2013.nex
 #INFILE=Crawford_etal_2012.nex
-INFILE=temp.nex
+#INFILE=temp.nex
 
 INFSTEM=${INFILE%.nex*}
-PN2MB=partitNex2MrBayes_2017.10.23.1000.sh
+PN2MB=partitNex2MrBayes_2017.10.24.1900.sh
 SD=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes
 WD=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes/examples/01_input
 
@@ -38,9 +38,9 @@ MDLTSTTYP=partitionfinder  # userscheme
 STRTTME=$(date '+%Y.%m.%d.%H%M')
 OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
 
-bash $SD/$PN2MB -f $WD/$INFILE -c $SD/partitNex2MrBayes.cfg -t partitionfinder2 -b /home/michael_science/git/partitionfinder/PartitionFinder.py -o $WD/${OUTSTEM}_userscheme.mrbayes -v -k -u > $WD/${OUTSTEM}_userscheme.log
+bash $SD/$PN2MB -f $WD/$INFILE -c $SD/partitNex2MrBayes.cfg -t $MDLTSTTYP -b /home/michael_science/git/partitionfinder/PartitionFinder.py -o $WD/${OUTSTEM}_userscheme.mrbayes -v -k -u > $WD/${OUTSTEM}_userscheme.log
 
 mkdir -p $WD/$OUTSTEM
-mv $WD/${OUTSTEM}.* $WD/$OUTSTEM/ && mv $WD/${OUTSTEM}_* $WD/$OUTSTEM/
+mv $WD/${OUTSTEM}* $WD/$OUTSTEM/ && mv $WD/${OUTSTEM}_* $WD/$OUTSTEM/
 
 ########################################################################
