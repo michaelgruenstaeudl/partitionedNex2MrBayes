@@ -13,7 +13,7 @@ USAGE="bash $THIS_SCRIPT -f <path_to_NEXUS_file> -c <path_to_config_file> -t <ty
 ########################################################################
 
 # TO DO:
-# [currently nothing]
+# (1) Replace multiple instances of sed text replacements (especially the terrible in-line replacements "sed -i") with substitutions using Bash's built-in parameter expansion.
 
 # PAPER: BMC Evol Biol. 2010 Aug 9;10:242. doi: 10.1186/1471-2148-10-242. Performance of criteria for selecting evolutionary models in phylogenetics: a comprehensive study based on simulated datasets. Luo A1, Qiao H, Zhang Y, Shi W, Ho SY, Xu W, Zhang A, Zhu C.
 # TELLS THAT BIC SHOULD BE USED FOR MODEL SELECTION.
@@ -33,7 +33,7 @@ RUNTIME_start_pp=$(date '+%Y.%m.%d.%H%M')
 # Initialize variables to default values
 OPT_A="name of, and file path to, the input NEXUS file"
 OPT_B="name of, and file path to, the input config file"
-OPT_C="name of modeltesting software tool (available: jmodeltest, partitionfinder, sms)"
+OPT_C="name of partitionfinding / modeltesting software tool (available: jmodeltest, partitionfinder, partitiontest, sms)"
 OPT_D="name of, and file path to, the modeltesting binary or script"
 OPT_E="name of, and file path to, the output file"
 keepflsBOOL=0
@@ -53,7 +53,7 @@ function my_help {
     echo "MANDATORY command line switches:"
     echo "${REV}-f${NORM}  --Sets name of, and file path to, ${BOLD}NEXUS file${NORM}. No default exists."
     echo "${REV}-c${NORM}  --Sets name of, and file path to, ${BOLD}config file${NORM}. No default exists."
-    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of modeltesting software tool. Available: jmodeltest, partitionfinder, sms. No default exists."
+    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of partitionfinding / modeltesting software tool. Available: jmodeltest, partitionfinder, partitiontest, sms. No default exists."
     echo "${REV}-b${NORM}  --Sets name of, and file path to, the modeltesting ${BOLD}binary or script${NORM}. No default exists."
     echo "${REV}-o${NORM}  --Sets name of, and file path to, ${BOLD}output file${NORM}. No default exists."
     echo ""
@@ -120,7 +120,7 @@ assemble_mrbayes_block_general()
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of outfile ($mbOUTFILE)
 #         $3: name of file with lset definitions ($lsetDefns)
-#         $4: name of file with charsets lines ($charSetsL)
+#         $4: name of file containing the extracted SETS-block ($setsBlock)
 #         $5: name of config file ($reformCFG)
 #   OUP:  none; operates on lset definitions file
 {
@@ -131,10 +131,8 @@ assemble_mrbayes_block_general()
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    charsetLines=$(cat ./$1/$4)
+    charsetLines=$(cat ./$1/$4 | grep 'charset')
     echo -e 'begin mrbayes;' >> $2
-    echo -e 'set autoclose=yes;' >> $2
-    echo -e 'set nowarnings=yes;' >> $2
     echo "$charsetLines" >> $2
     echo -n 'partition combined =' $(echo "$charsetLines" | wc -l) ': ' >> $2 # Line must not end with linebreak, thus -n
     echo "$charsetLines" | awk '{print $2}' | awk '{ORS=", "; print; }' >> $2
@@ -203,14 +201,16 @@ ensure_partitions_form_continuous_range()
     # Get charset definition lines
     charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$2 | grep 'charset')
     # Convert from discrete to continuous range
-    continuousRange1=$(echo "$charsetLines" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
+    continuousRange=$(echo "$charsetLines" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
     # Add concluding partition, if missing
     matrxLngth=$3
-    continuousRange2=$(echo "$continuousRange1" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
+    closingRange=$(echo "$continuousRange" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
     echo "begin sets;" > ./$1/$2
-    echo "$continuousRange1" >> ./$1/$2 # NOTE: $continuousRange1 is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
-    echo "$continuousRange2" >> ./$1/$2
+    echo "$continuousRange" >> ./$1/$2 # NOTE: $continuousRange is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
+    if [ -n "$closingRange" ]; then # NOTE: The -n operator checks whether the string is not null.
+        echo "$closingRange" >> ./$1/$2
+    fi
     echo "end;" >> ./$1/$2
 }
 
@@ -232,10 +232,11 @@ reconstitute_datablock_as_interleaved()
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of DATA-block ($dataBlock)
 #         $3: name of outfile ($mbOUTFILE)
+#         $4: filename prefix
 #   OUP:  none; writes to outfile
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
@@ -246,7 +247,7 @@ reconstitute_datablock_as_interleaved()
     # Step 2: Specify that matrix is interleaved
     sed -i '/format/ s/\;/ interleave\=yes\;/' $3 # in-line replacement of semi-colon with interleave-info plus semi-colon, if line has keyword 'format'
     # Step 3: Append the individual partitions
-    for p in $(ls ./$1/partition_[0-9]* | grep -v "\.bestModel\|\.phy\|\.runlog\|_sms\.csv"); do # NOTE: Use [0-9] to separate from 'partition_finder.cfg'
+    for p in $(ls ./$1/$4_partition_[0-9]* | grep -v "\.bestModel\|\.phy\|\.runlog\|_sms\.csv"); do # NOTE: Use [0-9] to separate from 'partition_finder.cfg'
         echo -ne "\n[$(basename $p)]\n" >> $3
         pureMatrix=$(cat $p | sed -n '/matrix/{:a;n;/;/b;p;ba}')
         algnMatrx=$(echo "$pureMatrix" | column -t)
@@ -363,46 +364,51 @@ reformat_nexus_file()
 
 split_matrix_into_partitions()
 #   This function takes the matrix of a NEXUS file and extracts from it a 
-#   character range (hereafter "sub-matrix") specified by the definition 
-#   of a charsets line.
+#   character range (hereafter "sub-matrix") specified by charsets line 
+#   definitions.
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of file containing the DATA-block
 #         $3: name of file containing the SETS-block
-#   OUP:  file with name $charrngFn in temp folder
-#         file with name $partFname in temp folder
+#         $4: outname prefix
+#   OUP:  file with name $partitnFn in temp folder
 {
     # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
     pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$2)
-    charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$3 | grep 'charset')
-    nexusNew1='#NEXUS\n\n'
-    nexusNew2=$(sed -e '/matrix/,$d' ./$1/$2) # Get section between "#NEXUS" and "MATRIX"
-    nexusNew3='\nmatrix'
-    nexusNew4=';\nend;\n'
+    charsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$3 | grep 'charset')
+    dimensnLns=$(sed -e '/matrix/,$d' ./$1/$2) # Get section between "#NEXUS" and "MATRIX"
     partitionCounter=0
     while IFS= read -r line; do 
         partitionCounter=$((partitionCounter+1))
         partitFn1=$(printf %04d $partitionCounter)
         partitFn2=$(echo "$line" | awk '{print $2}')
-        partitnFn=partition_${partitFn1}_${partitFn2}
+        partitnFn=$4_partition_${partitFn1}_${partitFn2}
         # Get the info on the charset range
         charsetRanges=$(echo "$line" | awk '{print $4}' | sed 's/\;//')
-        # Step 1 of assembling the new partition file
-        echo -e "$nexusNew1$nexusNew2$nexusNew3" > ./$1/$partitnFn
-        # Step 2 of assembling the new partition file: Add the sub-matrix
-        awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' <(echo "$charsetRanges") FS=' ' <(echo "$pureMatrix") >> ./$1/$partitnFn # AMAZING LINE! The actual string splitting is done here.
-        # Step 3 of assembling the new partition file
-        echo -e "$nexusNew4" >> ./$1/$partitnFn
+        
+        # Assembling the new partition file
+        echo -e "#NEXUS\n \n$dimensnLns \nmatrix" > ./$1/$partitnFn
+
+        # EXTRACT THE MATRIX OF A NEW PARTITION
+        # EXPLANATION: This awk-command takes one or more charset-ranges (which are separated by whitespaces), extracts the respective submatrices from the pureMatrix and concatenates them to a new matrix (i.e., to ./$1/$newPartitnFn).
+        awk 'NR==FNR{for(i=1;i<=NF;i++) {split($i,x,"-"); start[i]=x[1]; end[i]=x[2]}; print ""; n=NF; next} {printf "%s", $1 FS; for(i=1;i<=n;i++) printf "%s", substr($2,start[i],end[i]-start[i]+1); print ""}' <(echo "$charsetRanges") <(echo "$pureMatrix") | sed '/^\s*$/d' >> ./$1/$partitnFn
+        # LEGACYCODE: The following legacycode could only handle one charrange per charset.
+        #awk 'NR==FNR{start=$1;lgth=$2-$1+1;next} {print $1, substr($2,start,lgth)}' FS='-' <(echo "$charsetRanges") FS=' ' <(echo "$pureMatrix") >> ./$1/$partitnFn
+        
+        # Assembling the new partition file
+        echo -e ";\nend;\n" >> ./$1/$partitnFn
+        
         # Get the length of the sub-matrix
-        mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charsetRanges"))
+        #mtrxLngth=$(awk '{print $2-$1+1}' FS='-' <(echo "$charsetRanges"))
+        mtrxLngth=$(cat ./$1/$partitnFn | grep -A1 "matrix" | head -n1 | wc -c)
         # Replace the number of characters with the length of the sub-matrix
         sed -i "/dimensions / s/nchar\=.*\;/nchar\=$mtrxLngth\;/" ./$1/$partitnFn
-    done <<< "$charsetLines" # Using a here-string
+    done <<< "$charsetLns" # Using a here-string
 }
 
 split_nexus_into_blocks()
@@ -463,7 +469,92 @@ test_if_partitions_overlap()
 ########################################################################
 ########################################################################
 
-# FUNCTIONS SPECIFIC TO 'JMODELTEST'
+# FUNCTIONS USED IN MULTIPLE CASES
+
+assemble_new_nexus_from_new_partitions()
+#   This function rearranges matrix-blocks to conform to the new charset lines
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: filename of DATA-block ($dataBlock)
+#         $3: file prefix
+#         $4: name of outfile ($newNexFil)
+#   OUP:  write to the outfile
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+
+    # COMBINE NEW PARTITIONS TO NEW MATRIX
+    count=$(ls -1 ./$1/$3_partition_[0-9]* 2>/dev/null | wc -l)
+    if [ $count != 0 ]; then
+        awk '{print $1 " "}' ./$1/$3_partition_0001_* > ./$1/reconstitutedMatrix # Add only seqnames to matrix, not partition
+        touch ./$1/reconstitutedCharsets
+        nucleotideCounter=0
+        for newPartit in ./$1/$3_partition_[0-9]*; do
+            # DEALING WITH CHARSET LINES
+            partitionMatrix=$(cat $newPartit | awk '{print $2}' | sed -e 's/^[ \t]*//') # NOTE: "sed -e 's/^[ \t]*//'" removes leading whitespaces
+            charsetLine=$(echo "charset ")
+            charsetLine+=$(echo $(basename $newPartit) | awk -F"_" '{print $3}')
+            if [ $nucleotideCounter -eq 0 ]; then # NOTE: Counting starts at zero for length measurement, but at 1 for index positions
+                charsetLine+=$(echo " = 1-")
+            else
+                charsetLine+=$(echo " = $((nucleotideCounter+1))-")
+            fi
+            partition_length=$(echo "$partitionMatrix" | head -n1 | wc -c)
+            nucleotideCounter=$((nucleotideCounter+$partition_length-1))
+            charsetLine+=$(echo "$nucleotideCounter;")
+            echo "$charsetLine" >> ./$1/reconstitutedCharsets
+            # APPENDING (AND GROWING) THE MATRIX
+            matrixHandle=$(paste -d'\0' ./$1/reconstitutedMatrix <(echo "$partitionMatrix")) # NOTE: '\0' is defined as null delimiter (i.e., no character) by POSIX
+            echo "$matrixHandle" > ./$1/reconstitutedMatrix
+        done
+    else
+        echo -ne " ERROR | $(get_current_time) | No new partition files (i.e., xyz_partition_1234) found.\n"
+        exit 1
+    fi
+    
+    # RECONSTITUTE NEW NEXUS-FILE
+    echo -e "#NEXUS\n" > $4
+    # Write DATA-block
+    cat ./$1/$2 | sed -n '/begin data\;/,/matrix/p' >> $4
+    column -t ./$1/reconstitutedMatrix >> $4
+    echo -e ";\nend;\n" >> $4
+    # Write SETS-block
+    echo "begin sets;" >> $4
+    cat ./$1/reconstitutedCharsets >> $4
+    echo "end;" >> $4
+}
+
+convert_datablock_to_phylip()
+#   This function converts a NEXUS-formatted DATA-block to a PHYLIP-file.
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of reformatted NEXUS file ($reformNEX)
+#         $3: filename of DATA-block ($dataBlock)
+#         $4: number of characters in DNA matrix ($ncharVar)
+#         $5: name of outfile ($phylipFil)
+#   OUP:  writes a phylip-formatted file to disk
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 5)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    # Extract number of taxa
+    ntaxVar=$(grep ^dimensions $1/$2 | sed -n 's/.*ntax=\([^ ]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a space means that ntax has to come before nchar in dimensions line.
+    
+    # Write ntax and nvar to first line of phylip file
+    echo "$ntaxVar $4" > ./$1/$5
+    
+    # Extract matrix from DATA-block
+    pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$3)
+    #algnMatrx=$(echo "$pureMatrix" | column -t)
+    #echo "$algnMatrx" >> ./$1/$5
+    echo "$pureMatrix" >> ./$1/$5
+}
 
 convert_models_into_lset()
 #   This function converts the names of nucleotide substitution models 
@@ -473,7 +564,7 @@ convert_models_into_lset()
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of file with best models ($bestModls)
 #         $3: name of file with lset definitions file ($lsetDefns)
-#         $4: name of file with charsets lines ($charSetsL)
+#         $4: name of file containing the extracted SETS-block ($setsBlock)
 #   OUP:  none; operates on lset definitions file
 #   NOTE:   The model abbreviation (e.g., `GTR+I+G`) must be at the line 
 #           end and no whitespace must come thereafter. This end of line 
@@ -495,80 +586,71 @@ convert_models_into_lset()
     # STEP 1: Convert the model names to lset definitions
     while read LINE
     do
-        modelKeyw=$(echo "$LINE" | awk '{print $2}' | cut -c1-2)
-        if [ "$modelKeyw" == "GT" ]; then #GTR
-            # NOTE: The dollar-sign behind the model name is critical to avoid that, for example, GTR+I replaces GTR+I+G
-            # NOTE: The final ampersand (in \[\#&\]) copies the model name to the end of the line; this is important to allow the applyto-assignment!
-            LINE=$(echo "$LINE" | sed 's/.* GTR$/lset applyto=() nst\=6\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* GTR+I$/lset applyto=() nst\=6 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* GTR+G$/lset applyto=() nst\=6 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* GTR+I+G$/lset applyto=() nst\=6 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* GTR+G+I$/lset applyto=() nst\=6 rates\=invgamma\; \[\#&\]/') # SMS calls model "GTR+G+I" instead of "GTR+I+G"
-        elif [ "$modelKeyw" == "HK" ]; then #HKY
-            LINE=$(echo "$LINE" | sed 's/.* HKY$/lset applyto=() nst\=2\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY+I$/lset applyto=() nst\=2 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY+G$/lset applyto=() nst\=2 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY+I+G$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY+G+I$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-            # In SMS, "HKY" is called "HKY85"
-            LINE=$(echo "$LINE" | sed 's/.* HKY85$/lset applyto=() nst\=2\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY85+I$/lset applyto=() nst\=2 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY85+G$/lset applyto=() nst\=2 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY85+I+G$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | sed 's/.* HKY85+G+I$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-        elif [ "$modelKeyw" == "K8" ]; then #K80(=K2P)
-            LINE=$(echo "$LINE" | awk '/K80$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* K80$/lset applyto=() nst\=2\; \[\#&\]/') # NOTE: `/prset/!` means conduct replacement unless keyword ´prset´ present in line
-            LINE=$(echo "$LINE" | awk '/K80\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* K80+I$/lset applyto=() nst\=2 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/K80\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* K80+G$/lset applyto=() nst\=2 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/K80\+I\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* K80+I+G$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/K80\+G\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* K80+G+I$/lset applyto=() nst\=2 rates\=invgamma\; \[\#&\]/')
-        elif [ "$modelKeyw" == "SY" ]; then #SYM
-            LINE=$(echo "$LINE" | awk '/SYM$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* SYM$/lset applyto=() nst\=6\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/SYM\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* SYM+I$/lset applyto=() nst\=6 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/SYM\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* SYM+G$/lset applyto=() nst\=6 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/SYM\+I\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* SYM+I+G$/lset applyto=() nst\=6 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/SYM\+G\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* SYM+G+I$/lset applyto=() nst\=6 rates\=invgamma\; \[\#&\]/')
-        elif [ "$modelKeyw" == "F8" ]; then #F81
-            LINE=$(echo "$LINE" | sed 's/.* F81$/lset applyto=() nst\=1\; \[\#&\]/' "$LINE")
-            LINE=$(echo "$LINE" | sed 's/.* F81+I$/lset applyto=() nst\=1 rates\=propinv\; \[\#&\]/' "$LINE")
-            LINE=$(echo "$LINE" | sed 's/.* F81+G$/lset applyto=() nst\=1 rates\=gamma\; \[\#&\]/' "$LINE")
-            LINE=$(echo "$LINE" | sed 's/.* F81+I+G$/lset applyto=() nst\=1 rates\=invgamma\; \[\#&\]/' "$LINE")
-            LINE=$(echo "$LINE" | sed 's/.* F81+G+I$/lset applyto=() nst\=1 rates\=invgamma\; \[\#&\]/' "$LINE")
-        elif [ "$modelKeyw" == "JC" ]; then #JC
-            LINE=$(echo "$LINE" | awk '/JC$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* JC$/lset applyto=() nst\=1\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/JC\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* JC+I$/lset applyto=() nst\=1 rates\=propinv\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/JC\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* JC+G$/lset applyto=() nst\=1 rates\=gamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/JC\+I\+G$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* JC+I+G$/lset applyto=() nst\=1 rates\=invgamma\; \[\#&\]/')
-            LINE=$(echo "$LINE" | awk '/JC\+G\+I$/{$0=$0 "\nprset applyto=() statefreqpr=fixed(equal);" FS "[#"$0"]"} 1')
-            LINE=$(echo "$LINE" | sed '/prset/! s/.* JC+G+I$/lset applyto=() nst\=1 rates\=invgamma\; \[\#&\]/')
-        else # In case a modelname is not recognized (e.g., TN93 with SMS), substitute with the default GTR+I+G
-            LINE=$(echo "$LINE" | awk '{print "lset applyto=() nst=6 rates=invgamma; [#" $0 " - Model not recognized - Replaced with GTR+I+G]" }' )
+        partit_name=$(echo "$LINE" | awk '{print $1}')
+        model_abbrv=$(echo "$LINE" | awk '{print $2}' | awk -F'+' '{print $1}')
+        model_invgm=$(echo "$LINE" | awk '{print $2}' | awk -F'+' '{print $1=""; gsub(" ","+"); print $0}' | tr -d '\n')
+        
+        # DNA SUBSTITUTION MODEL
+        if [ "$model_abbrv" == "GTR" ]; then
+            PRELINE=$(echo "lset applyto=() nst=6 [INVGM_PLACEHOLDER]")
+        elif [ "$modelKeyw" == "SYM" ]; then 
+            PRELINE=$(echo "lset applyto=() nst=6 [INVGM_PLACEHOLDER]\nprset applyto=() statefreqpr=fixed(equal);")
+        elif [ "$modelKeyw" == "HKY" -o "$modelKeyw" == "HKY85" ]; then 
+            PRELINE=$(echo "lset applyto=() nst=2 [INVGM_PLACEHOLDER]")
+        elif [ "$modelKeyw" == "K80" -o "$modelKeyw" == "K2P" ]; then 
+            PRELINE=$(echo "lset applyto=() nst=2 [INVGM_PLACEHOLDER]\nprset applyto=() statefreqpr=fixed(equal);")
+        elif [ "$modelKeyw" == "F81" ]; then 
+            PRELINE=$(echo "lset applyto=() nst=1 [INVGM_PLACEHOLDER]")
+        elif [ "$modelKeyw" == "JC" -o "$modelKeyw" == "JC69" ]; then 
+            PRELINE=$(echo "lset applyto=() nst=1 [INVGM_PLACEHOLDER]\nprset applyto=() statefreqpr=fixed(equal);")
+        else # In case a modelname is not in the above list (e.g., TIM, TPM, TrN in PartitionTest; TN93 with SMS), substitute with the default GTR
+            PRELINE=$(echo "lset applyto=() nst=6 [INVGM_PLACEHOLDER]")
         fi
-        echo "$LINE" >> ./$1/$3
+        # INVGAMMA SETTINGS
+        if [ "$model_invgm" == "+I" ]; then # IMPORTANT: Don't use quotation marks around variable $model_invgm, to avoid inclusion of newline characters into comparison
+            LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/rates\=propinv\;} # Substitution with Bash's built-in parameter expansion;
+        elif [ "$model_invgm" == "+G" ]; then
+            LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/rates\=gamma\;}
+        elif [ "$model_invgm" == "+I+G" -o "$model_invgm" == "+G+I" ]; then
+            LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/rates\=invgamma\;}
+        else
+            LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/\;}
+        fi
+        
+        echo "$LINE [# $partit_name ]" >> ./$1/$3
     done < ./$1/$2
 
     # STEP 2: Replace the partition names in the lset definitions with the line numbers in the charsets
     # NOTE: THIS IS WHY ORDERED PARTITIONS ARE CRITICAL!
-    charsetLines=$(cat ./$1/$4)
+    charsetLines=$(cat ./$1/$4 | grep 'charset')
     for charset in $(echo "$charsetLines" | awk '{print $2}'); do # Use doublequote-enclosing around a variable to maintain its newlines!
         lineNumbr=$(echo "$charsetLines" | awk '/'$charset'/{print NR; exit}')
         sed -i "/$charset/ s/applyto\=()/applyto\=($lineNumbr)/" ./$1/$3 # Double quotes are critical here due to variable
     done
 }
+
+update_setsblock_after_partitionfinding()
+#   This function splits a NEXUS file into individual blocks.
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of file with best models ($bestModls)
+#         $3: name of file containing the extracted SETS-block ($setsBlock)
+#   OUP:  file with a SETS-block
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    # Foo bar baz
+    
+}
+
+########################################################################
+########################################################################
+
+# FUNCTIONS SPECIFIC TO 'JMODELTEST'
 
 extract_modelinfo_from_jmodeltest()
 #   This function extracts modelinfo from the output of jModeltest; the output was saved into logfiles ending with the name ".bestModel"
@@ -725,150 +807,69 @@ modeltesting_via_sms()
 
 # FUNCTIONS SPECIFIC TO 'PARTITIONFINDER'
 
-assemble_mrbayes_block_from_partitionfinder_results()
-#   This function ...
+# assemble_mrbayes_block_from_partitionfinder_results()
+# #   This function ...
+# #   INP:  $1: path to temp folder ($tmpFOLDER)
+# #         $2: name of outfile ($mbOUTFILE)
+# #   OUP:  append to the outfile
+# {
+#     # INTERNAL FUNCTION CHECKS
+#     (($# == 2)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+#     for ((i=1; i<=$#; i++)); do
+#         argVal="${!i}"
+#         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+#     done
+#     
+#     pf_bestscheme=./$1/analysis/best_scheme.txt
+#     kw1="begin mrbayes;"
+#     kw2="end;"
+#     mrbayes_block=$(sed -n "/$kw1/,/$kw2/p" $pf_bestscheme)
+#     if [ ! -z "$mrbayes_block" ]; then
+#         echo "$mrbayes_block" >> $2 # NOTE: Append only! Also: $2 (i.e., mbOUTFILE) does not reside in $1 (i.e., $tmpFOLDER)
+#     else
+#         echo -ne " ERROR | $(get_current_time) | Parsing of MRBAYES-block unsuccessful from file: $pf_bestscheme\n"
+#         exit 1
+#     fi
+# }
+
+generate_setsblock_from_partitionfinder_results()
+#   This function extracts the new charset info (inlcuding the best
+#   partitioning scheme).
 #   INP:  $1: path to temp folder ($tmpFOLDER)
-#         $2: name of outfile ($mbOUTFILE)
-#   OUP:  append to the outfile
+#         $2: name of outfile ($nwSetsBlk)
+#   OUP:  write to the outfile
 {
+
     # INTERNAL FUNCTION CHECKS
     (($# == 2)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
         argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
-    
+
     pf_bestscheme=./$1/analysis/best_scheme.txt
-    kw1="begin mrbayes;"
-    kw2="end;"
-    mrbayes_block=$(sed -n "/$kw1/,/$kw2/p" $pf_bestscheme)
-    if [ ! -z "$mrbayes_block" ]; then
-        echo "$mrbayes_block" >> $2 # NOTE: Append only! Also: $2 (i.e., mbOUTFILE) does not reside in $1 (i.e., $tmpFOLDER)
-    else
-        echo -ne " ERROR | $(get_current_time) | Parsing of MRBAYES-block unsuccessful from file: $pf_bestscheme\n"
-        exit 1
-    fi
-}
 
-assemble_new_nexus_from_partitionfinder_results()
-#   This function ...
-#   INP:  $1: path to temp folder ($tmpFOLDER)
-#         $2: filename of DATA-block ($dataBlock)
-#         $3: name of outfile ($newNexFil)
-#   OUP:  write to the outfile
-{
-    # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
-    for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
-        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
-    done
-    
-    pf_bestscheme=./$1/analysis/best_scheme.txt
-    pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$2)
+    if [ -f "$pf_bestscheme" ]; then
+        # EXTRACT PARTITION SCHEME AND CHARSETS
+        kw1="Scheme Description in PartitionFinder format"
+        kw2="begin sets;"
+        kw3="end;"
+        region_of_interest=$(sed -n "/$kw1/,/$kw3/p; /$kw3/q" $pf_bestscheme)
+        best_scheme=$(echo "$region_of_interest" | grep -A1 "$kw1" | tail -n1 | awk -F"=" '{print $2}')
+        new_charsetLines=$(echo "$region_of_interest" | sed -n "/$kw2/,/$kw3/p" | grep --ignore-case "charset")
 
-    # EXTRACT PARTITION SCHEME AND CHARSETS
-    kw1="Scheme Description in PartitionFinder format"
-    kw2="begin sets;"
-    kw3="end;"
-    region_of_interest=$(sed -n "/$kw1/,/$kw3/p; /$kw3/q" $pf_bestscheme)
-    best_scheme=$(echo "$region_of_interest" | grep -A1 "$kw1" | tail -n1 | awk -F"=" '{print $2}')
-    new_charsetLines=$(echo "$region_of_interest" | sed -n "/$kw2/,/$kw3/p" | grep --ignore-case "charset")
-
-    # SPLIT OLD MATRIX AND FORM NEW PARTITIONS
-    partitionCounter=0
-    if [ ! -z "$new_charsetLines" ] && [ ! -z "$best_scheme" ]; then
-        while IFS= read -r line; do 
-            partitionCounter=$((partitionCounter+1))
-            newPartitFn1=$(printf %04d $partitionCounter)
-            newPartitFn2=$(echo "$line" | awk '{print $2}')
-            newPartitnFn=newPartition_${newPartitFn1}_${newPartitFn2}
-            # Get the info on the charset range
-            charsetRanges=$(echo "$line" | awk -F"=" '{print $2}' | sed 's/\;//')
-            # Extract the matrix of a new partition
-            awk 'NR==FNR{for(i=1;i<=NF;i++) {split($i,x,"-"); start[i]=x[1]; end[i]=x[2]}; print ""; n=NF; next} {printf "%s", $1 FS; for(i=1;i<=n;i++) printf "%s", substr($2,start[i],end[i]-start[i]+1); print ""}' <(echo "$charsetRanges") <(echo "$pureMatrix") | sed '/^\s*$/d' > ./$1/$newPartitnFn # AMAZING LINE! The actual string splitting is done here.
-        done <<< "$new_charsetLines" # Using a here-string
-
-        # COMBINE NEW PARTITIONS TO NEW MATRIX
-        count=$(ls -1 ./$1/newPartition_* 2>/dev/null | wc -l)
-        if [ $count != 0 ]; then
-            awk '{print $1 " "}' ./$1/newPartition_0001_* > ./$1/newMatrix # Add only seqnames to matrix, not partition
-            touch ./$1/newCharsets
-            nucleotideCounter=0
-            for newPartit in ./$1/newPartition_*; do
-                # Dealing with charset lines
-                partitionMatrix=$(cat $newPartit | awk '{print $2}' | sed -e 's/^[ \t]*//') # NOTE: "sed -e 's/^[ \t]*//'" removes leading whitespaces
-                charsetLine=$(echo "charset ")
-                charsetLine+=$(echo $(basename $newPartit) | awk -F"_" '{print $3}')
-                if [ $nucleotideCounter -eq 0 ]; then # NOTE: Counting starts at zero for length measurement, but at 1 for index positions
-                    charsetLine+=$(echo " = 1-")
-                else
-                    charsetLine+=$(echo " = $((nucleotideCounter+1))-")
-                fi
-                partition_length=$(echo "$partitionMatrix" | head -n1 | wc -c)
-                nucleotideCounter=$((nucleotideCounter+$partition_length-1))
-                charsetLine+=$(echo "$nucleotideCounter;")
-                echo "$charsetLine" >> ./$1/newCharsets
-                # Dealing with matrix
-                matrixHandle=$(paste -d'\0' ./$1/newMatrix <(echo "$partitionMatrix")) # NOTE: '\0' is defined as null delimiter (i.e., no character) by POSIX
-                echo "$matrixHandle" > ./$1/newMatrix
-            done
-        else
-            echo -ne " ERROR | $(get_current_time) | No new partition files (newPartition_*) found.\n"
-            exit 1
-        fi
-        
         # ADD BEST_SCHEME INFO TO CHARSET LINES
         best_scheme=$(echo "${best_scheme//, /,}")
         best_scheme=$(echo "${best_scheme//(/[}")
         best_scheme=$(echo "${best_scheme//)/]}")
         best_scheme=$(echo "${best_scheme//;/}" | sed -e 's/^[ \t]*//')
-        adjusted_charsetLines=$(awk 'FNR==NR{split($0,strarr);nextfile}/Subset/{print $0,strarr[++i];next}1' <(echo "$best_scheme") ./$1/newCharsets)
-        
-        # RECONSTITUTE NEW NEXUS-FILE
-        # Step 1: Append dimension and format info of DATA-block
-        echo -e "#NEXUS\n" > $3
-        cat ./$1/$2 | sed -n '/begin data\;/,/matrix/p' >> $3
-        # Step 2: Append the new matrix
-        column -t ./$1/newMatrix >> $3
-        # Step 3: Append a closing ';\nend;' of DATA-block
-        echo -e ";\nend;\n" >> $3
-        # Step 4: Write begin of SETS-block
-        echo "begin sets;" >> $3
-        # Step 5: Write charset lines
-        echo "$adjusted_charsetLines" >> $3
-        # Step 6: Append a closing '\nend;' of SETS-block
-        echo "end;" >> $3
+        adjusted_charsetLines=$(awk 'FNR==NR{split($0,strarr);nextfile}/Subset/{print $0,strarr[++i];next}1' <(echo "$best_scheme") <(echo "$new_charsetLines"))
+        echo -ne "begin sets;\n$adjusted_charsetLines\nend;" | awk '{$1=$1;print}' > ./$1/$2
 
     else
-        echo -ne " ERROR | $(get_current_time) | Parsing of best scheme and charsets unsuccessful from file: $pf_bestscheme\n"
+        echo -ne " ERROR | $(get_current_time) | No result files of the modeltesting (*.bestModel) found.\n"
         exit 1
     fi
-}
-
-convert_datablock_to_phylip()
-#   This function converts a NEXUS-formatted DATA-block to a PHYLIP-file.
-#   INP:  $1: path to temp folder ($tmpFOLDER)
-#         $2: filename of DATA-block ($dataBlock)
-#         $3: number of taxa in DNA matrix ($ntaxVar)
-#         $4: number of characters in DNA matrix ($ncharVar)
-#         $5: name of outfile ($phylipFil)
-#   OUP:  writes a phylip-formatted file to disk
-{
-    # INTERNAL FUNCTION CHECKS
-    (($# == 5)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
-    for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
-        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
-    done
-    
-    # Write ntax and nvar to first line of phylip file
-    echo "$3 $4" > ./$1/$5
-    # Extract matrix from DATA-block
-    pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$2)
-    #algnMatrx=$(echo "$pureMatrix" | column -t)
-    #echo "$algnMatrx" >> ./$1/$5
-    echo "$pureMatrix" >> ./$1/$5
 }
 
 extract_modelinfo_from_partitionfinder()
@@ -902,7 +903,7 @@ extract_modelinfo_from_partitionfinder()
 }
 
 modeltesting_via_partitionfinder()
-#   This function conducts modeltesting via PartitionFinder
+#   This function conducts partitionfinding / modeltesting via PartitionFinder
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: path to PartitionFinder Python script ($BinMDLTST)
 #         $3: name of config file ($reformCFG)
@@ -923,7 +924,7 @@ modeltesting_via_partitionfinder()
         exit 1
     fi
     
-    # Conduct modeltesting
+    # Conduct partitionfinding / modeltesting
     if [ -f "./$1/partition_finder.cfg" ]; then
         # USING CONFIG TEMPLATE
         CMDline=$(grep -A1 --ignore-case '^%PARTITIONFINDER_CMDLINE:' ./$1/$3 | tail -n1)
@@ -941,7 +942,7 @@ write_partitionfinder_config_file()
 #   INP:  $1: path to temp folder ($tmpFOLDER)
 #         $2: name of config file ($reformCFG)
 #         $3: name of phylip-formatted file ($phylipFil)
-#         $4: name of file with charsets lines ($charSetsL)
+#         $4: name of file containing the extracted SETS-block ($setsBlock)
 #         $5: boolean variable if userscheme only or not ($usrschmBOOL)
 #   OUP:  writes a phylip-formatted file to disk
 {
@@ -952,20 +953,134 @@ write_partitionfinder_config_file()
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    charsetLines=$(cat ./$1/$4)
+    charsetLines=$(cat ./$1/$4 | grep 'charset')
+
     # USING CONFIG TEMPLATE
     CMDline=$(grep -A1 --ignore-case '^%PARTITIONFINDER_CFG:' ./$1/$2 | tail -n1)
     CMDline=${CMDline//\[NAME_OF_ALIGNMENT\]/$3} # Substitution with Bash's built-in parameter expansion
-    CMDline=${CMDline//\[LIST_OF_DATA_BLOCKS\]/$charsetLines} # Substitution with Bash's built-in parameter expansion
-    # Setting userscheme-only search in PartitionFinder or not.
+    CMDline=${CMDline//\[LIST_OF_DATA_BLOCKS\]/$charsetLines}
+
+    # Setting userscheme-only search
     if [ $5 -eq 1 ]; then
         echo -ne " INFO  | $(get_current_time) | Estimating model fit of user-defined partition scheme only\n"
         CMDline=$(echo "$CMDline" | sed 's/\[schemes\].*/[schemes]/') # Remove everything after keyword "[schemes]"
         CMDline+="\nsearch=user;" # Appending string to variable
-        charsetNums=$(echo "$charsetLines" | awk '{print "("$2")"}' | tr -d '\n') # NOTE: tr-command removes newlines from list
-        CMDline+="\nuserdefined=$charsetNums;" # Appending string to variable
+        charsetUserscheme=$(echo "$charsetLines" | awk '{print "("$2")"}' | tr -d '\n') # NOTE: tr-command removes newlines from list
+        CMDline+="\nuserdefined=$charsetUserscheme;" # Appending string to variable
     fi
+
+    # OUTPUT
+    CMDline=$(echo "$CMDline" | awk '{$1=$1;print}') # NOTE: Remove all leading and trailing whitespaces
     echo -e "$CMDline" > ./$1/partition_finder.cfg
+}
+
+########################################################################
+########################################################################
+
+# FUNCTIONS SPECIFIC TO 'PARTITIONTEST'
+
+
+extract_modelinfo_from_partitiontest()
+#   This function ...
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of phylip-formatted file ($phylipFil)
+#         $3: name of file to collect bestfit model per partition ($bestModls)
+#   OUP:  writes the bestModls file to disk
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    pt_results=./$1/partest_$2/results
+    if [ -f "$pt_results" ]; then
+        best_scheme=$(sed -n '/\<name\>/,/\<\/name\>/p' $pt_results | grep -m1 -A1 "<name>" | tail -n1) # NOTE: "-m 1" in grep means return the first match
+        modelinf_str=$(sed -n '/\<partition\>/,/\/partition/p' $pt_results | sed -n '/\<partition\>/,/<bestModel/p' | grep -Ev "<name>|</name>|</partition>")
+        modelinf_str=$(echo "$modelinf_str" | sed -e 's/^[ \t]*//' | awk '/\<partition|\)/{printf "%s ", $0; next} 1')
+    
+        touch ./$1/$3
+        while IFS= read -r LINE; do 
+            partitionCounter=$(echo "$LINE" | sed -rn 's/.*id="([^"]*)".*/\1/p')
+            partitionCONTENT=$(echo "$LINE" | sed -rn 's/.*\(([^)]*).*/\1/p')
+            partitionModel=$(echo "$LINE" | sed -rn 's/.*bestModel name="([^"]*)".*/\1/p')
+            echo "Subset$partitionCounter $partitionModel [$partitionCONTENT]" >> ./$1/$3
+        done <<< "$modelinf_str" # Using a here-string
+    else
+        echo -ne " ERROR | $(get_current_time) | File $pt_results not found.\n"
+        exit 1
+    fi
+}
+
+modeltesting_via_partitiontest()
+#   This function conducts partitionfinding / modeltesting via PartitionTest
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: path to ParTest ($BinMDLTST)
+#         $3: name of config file ($reformCFG)
+#         $4: name of phylip-formatted file ($phylipFil)
+#   OUP:  none; generates an output folder named 'analysis' in temp folder
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    # Conduct partitionfinding / modeltesting
+    if [ -f "./$1/partition_test.cfg" ]; then
+        # USING CONFIG TEMPLATE
+        CMDline=$(grep -A1 --ignore-case '^%PARTITIONTEST_CMDLINE:' ./$1/$3 | tail -n1)
+        CMDline=${CMDline//\[PATH_TO_PARTEST\]/$2} # Substitution with Bash's built-in parameter expansion
+        CMDline=${CMDline//\[NAME_OF_ALIGNMENT\]/.\/$1\/$4}
+        coreCMD=${CMDline//\[NAME_OF_CFG_FILE\]/.\/$1\/partition_test.cfg}
+        eval "$coreCMD 1>./$1/partition_test.log 2>&1" # Executin of main_cmd
+    else
+        echo -ne " ERROR | $(get_current_time) | No PartitionFinder config file (partition_finder.cfg) found.\n"
+        exit 1
+    fi
+    
+    # Adjusting for current bug in partitiontest (output not saved to path specified in config file)
+    mv partest_$4 ./$1 # Moving outfile to tmpFolder
+}
+
+write_partitiontest_config_file()
+#   This function generates a config file as required by PartitionFinder.
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of config file ($reformCFG)
+#         $3: name of phylip-formatted file ($phylipFil)
+#         $4: name of file containing the extracted SETS-block ($setsBlock)
+#         $5: boolean variable if userscheme only or not ($usrschmBOOL)
+#   OUP:  writes a config file for partitiontest to disk
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 5)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    charsetLines=$(cat ./$1/$4 | grep 'charset')
+
+    # USING CONFIG TEMPLATE
+    CMDline=$(grep -A1 --ignore-case '^%PARTITIONTEST_CFG:' ./$1/$2 | tail -n1)
+    charsetLines=$(echo "$charsetLines" | sed "s/charset //" | sed "s/\;//")
+    CMDline=${CMDline//\[OUT_PATH\]/.\/$1\/} # Substitution with Bash's built-in parameter expansion
+    CMDline=${CMDline//\[LIST_OF_DATA_BLOCKS\]/$charsetLines}
+
+    # Setting userscheme-only search
+    if [ $5 -eq 1 ]; then
+        echo -ne " INFO  | $(get_current_time) | Estimating model fit of user-defined partition scheme only\n"
+        CMDline=$(echo "$CMDline" | sed 's/\[schemes\].*/[schemes]/') # Remove everything after keyword "[schemes]"
+        CMDline+="\nsearch=user;" # Appending string to variable
+        charsetUserscheme=$(echo "$charsetLines" | awk '{print "("$2")"}' | tr -d '\n') # NOTE: tr-command removes newlines from list
+        CMDline+="\nuserdefined=$charsetUserscheme;" # Appending string to variable
+    fi
+
+    # OUTPUT
+    CMDline=$(echo "$CMDline" | awk '{$1=$1;print}') # NOTE: Remove all leading and trailing whitespaces
+    echo -e "$CMDline" > ./$1/partition_test.cfg
 }
 
 ########################################################################
@@ -1015,9 +1130,9 @@ reformCFG=${filenStem}_ReformCFGFile
 dataBlock=${filenStem}_NexusDatBlock
 setsBlock=${filenStem}_NexusSetBlock
 bestModls=${filenStem}_BestFitModels
-charSetsL=${filenStem}_CharsetsLines
 lsetDefns=${filenStem}_LsetDefinitns
 phylipFil=${filenStem}_PhylipFormatd # Bash string extension cannot handle dots (i.e., must be "myfile_phy" instead of "myfile.phy")
+nwSetsBlk=${filenStem}_NewCharsetLns
 newNexFil=${mbOUTFILE}_new.nex
 
 # Checking input and output file availability
@@ -1025,7 +1140,7 @@ check_inp_outp_availability $nexINFILE $cfgINFILE $BinMDLTST $mbOUTFILE $get_cur
 
 # Make temporary folder
 #tmpFOLDER=$(cat /dev/urandom | tr -cd 'a-f0-9' | head -c 32)
-if [ "$typMDLTST" = "partitionfinder" ] && [ "$usrschmBOOL" -eq 1 ]; then
+if [ \( "$typMDLTST" = "partitionfinder" -a "$usrschmBOOL" -eq 1 \) -o \( "$typMDLTST" = "partitiontest" -a "$usrschmBOOL" -eq 1 \) ]; then
     tmpFOLDER=${filenStem}_${typMDLTST}_userscheme_${RUNTIME_start_pp}_runFiles
 else
     tmpFOLDER=${filenStem}_${typMDLTST}_${RUNTIME_start_pp}_runFiles
@@ -1042,12 +1157,8 @@ fi
 reformat_nexus_file $nexINFILE $tmpFOLDER/$reformNEX
 reformat_config_file $cfgINFILE $typMDLTST $tmpFOLDER/$reformCFG
 
-# Extract charsets
-cat $tmpFOLDER/$reformNEX | grep 'charset' > $tmpFOLDER/$charSetsL
 # Extract number of characters in DNA matrix
 ncharVar=$(grep ^dimensions $tmpFOLDER/$reformNEX | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a semi-colon means that nchar has to come as last attribute (i.e., after ntax) in dimensions line.
-# Extract number of taxa
-ntaxVar=$(grep ^dimensions $tmpFOLDER/$reformNEX | sed -n 's/.*ntax=\([^ ]*\).*/\1/p') # NOTE: Terminating the search for ntax=xx with a space means that ntax has to come before nchar in dimensions line.
 
 ########################################################################
 
@@ -1083,33 +1194,36 @@ if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Splitting matrix into partitions\n"
 fi
 
-split_matrix_into_partitions $tmpFOLDER $dataBlock $setsBlock
+split_matrix_into_partitions $tmpFOLDER $dataBlock $setsBlock "original"
 
 ########################################################################
 
-## PREPARING FILES FOR MODELTESTING
+## PREPARING FILES FOR PARTITIONFINDING / MODELTESTING
 if [ $verboseBOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Preparing files for modeltesting\n"
+    echo -ne " INFO  | $(get_current_time) | Preparing files for partitionfinding / modeltesting\n"
 fi
 
 if [ "$typMDLTST" = "sms" ]; then
     for partit in ./$tmpFOLDER/partition_*; do
         partit_ncharVar=$(grep ^dimensions $partit | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # Extract number of characters in partition
         partit_name=$(basename $partit) # Because convert_datablock_to_phylip() concatenates path and filename, I need to extract basename of infile here
-        convert_datablock_to_phylip $tmpFOLDER $partit_name $ntaxVar $partit_ncharVar ${partit_name}.phy
+        convert_datablock_to_phylip $tmpFOLDER $reformNEX $partit_name $partit_ncharVar ${partit_name}.phy
     done
 fi
 
 if [ "$typMDLTST" = "partitionfinder" ]; then
-    convert_datablock_to_phylip $tmpFOLDER $dataBlock $ntaxVar $ncharVar $phylipFil
-    write_partitionfinder_config_file $tmpFOLDER $reformCFG $phylipFil $charSetsL $usrschmBOOL
+    convert_datablock_to_phylip $tmpFOLDER $reformNEX $dataBlock $ncharVar $phylipFil
+    write_partitionfinder_config_file $tmpFOLDER $reformCFG $phylipFil $setsBlock $usrschmBOOL
+elif [ "$typMDLTST" = "partitiontest" ]; then
+    convert_datablock_to_phylip $tmpFOLDER $reformNEX $dataBlock $ncharVar $phylipFil
+    write_partitiontest_config_file $tmpFOLDER $reformCFG $phylipFil $setsBlock $usrschmBOOL
 fi
 
 ########################################################################
 
-## CONDUCTING MODELTESTING
+## CONDUCTING PARTITIONFINDING / MODELTESTING
 if [ $verboseBOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Conducting modeltesting via: $typMDLTST\n"
+    echo -ne " INFO  | $(get_current_time) | Conducting partitionfinding / modeltesting via: $typMDLTST\n"
 fi
 
 if [ "$typMDLTST" = "jmodeltest" ]; then
@@ -1117,24 +1231,57 @@ if [ "$typMDLTST" = "jmodeltest" ]; then
 elif [ "$typMDLTST" = "sms" ]; then
     modeltesting_via_sms $tmpFOLDER $BinMDLTST $reformCFG $verboseBOOL
 elif [ "$typMDLTST" = "partitionfinder" ]; then
-    modeltesting_via_partitionfinder $tmpFOLDER $BinMDLTST $reformCFG 
+    modeltesting_via_partitionfinder $tmpFOLDER $BinMDLTST $reformCFG
+elif [ "$typMDLTST" = "partitiontest" ]; then
+    modeltesting_via_partitiontest $tmpFOLDER $BinMDLTST $reformCFG $phylipFil
 fi
 
 ########################################################################
 
-## EXTRACTING INFORMATION FROM MODELTESTING RESULTS
+## EXTRACTING INFORMATION FROM PARTITIONFINDING / MODELTESTING RESULTS
 if [ $verboseBOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Extracting information from modeltesting results\n"
+    echo -ne " INFO  | $(get_current_time) | Extracting information from partitionfinding / modeltesting results\n"
 fi
 
 if [ "$typMDLTST" = "jmodeltest" ]; then
     extract_modelinfo_from_jmodeltest $tmpFOLDER $bestModls $verboseBOOL
-    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns $charSetsL
+    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns $setsBlock
 elif [ "$typMDLTST" = "sms" ]; then
     extract_modelinfo_from_sms $tmpFOLDER $bestModls $verboseBOOL
-    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns $charSetsL
+    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns $setsBlock
+elif [ "$typMDLTST" = "partitiontest" ]; then
+    extract_modelinfo_from_partitiontest $tmpFOLDER $phylipFil $bestModls
+    convert_models_into_lset $tmpFOLDER $bestModls $lsetDefns $setsBlock
 elif [ "$typMDLTST" = "partitionfinder" ]; then
     extract_modelinfo_from_partitionfinder $tmpFOLDER $bestModls
+    # No need to convert models into lset for partitionfinder; already done by this software
+fi
+
+########################################################################
+
+## UPDATING SETS-BLOCK
+
+if [ \( "$typMDLTST" = "partitionfinder" -a "$usrschmBOOL" -eq 0 \) -o \( "$typMDLTST" = "partitiontest" -a "$usrschmBOOL" -eq 0 \) ]; then
+
+    if [ $verboseBOOL -eq 1 ]; then
+        echo -ne " INFO  | $(get_current_time) | Updating SETS-block\n"
+    fi
+
+    if [ "$typMDLTST" = "partitionfinder" ]; then
+        generate_setsblock_from_partitionfinder_results $tmpFOLDER $nwSetsBlk
+    elif [ "$typMDLTST" = "partitiontest" ]; then
+        #generate_setsblock_from_partitiontest_results $tmpFOLDER $nwSetsBlk
+        echo "Function Missing!"
+        exit 1
+    fi
+
+    split_matrix_into_partitions $tmpFOLDER $dataBlock $nwSetsBlk "new"
+    if [ $verboseBOOL -eq 1 ]; then
+        echo -ne " INFO  | $(get_current_time) | Assembling new NEXUS file with optimal partitions\n"
+    fi
+    
+    assemble_new_nexus_from_new_partitions $tmpFOLDER $dataBlock "new" $newNexFil
+
 fi
 
 ########################################################################
@@ -1147,7 +1294,11 @@ fi
 echo -e "#NEXUS\n" > $mbOUTFILE
 
 # Reconstitute DATA-block as interleaved
-reconstitute_datablock_as_interleaved $tmpFOLDER $dataBlock $mbOUTFILE 
+if [ \( "$typMDLTST" = "partitionfinder" \) -o \( "$typMDLTST" = "partitiontest" \) ]; then
+    reconstitute_datablock_as_interleaved $tmpFOLDER $dataBlock $mbOUTFILE "new"
+else
+    reconstitute_datablock_as_interleaved $tmpFOLDER $dataBlock $mbOUTFILE "original"
+fi
 
 # Append the SETS-block, which is commented out
 echo -e "\n[\n$(cat $tmpFOLDER/$setsBlock)\n]\n" >> $mbOUTFILE
@@ -1155,16 +1306,14 @@ echo -e "\n[\n$(cat $tmpFOLDER/$setsBlock)\n]\n" >> $mbOUTFILE
 # Append info on best-fitting models
 echo -e "\n[\nBest-fitting models identified:\n$(cat $tmpFOLDER/$bestModls)\n]\n" >> $mbOUTFILE
 
-if [ "$typMDLTST" != "partitionfinder" ]; then # jmodeltest and sms both require function assemble_mrbayes_block_general()
-    assemble_mrbayes_block_general $tmpFOLDER $mbOUTFILE $lsetDefns $charSetsL $reformCFG
-elif [ "$typMDLTST" = "partitionfinder" ] && [ "$usrschmBOOL" -eq 1 ]; then
-    assemble_mrbayes_block_from_partitionfinder_results $tmpFOLDER $mbOUTFILE
-elif [ "$typMDLTST" = "partitionfinder" ] && [ "$usrschmBOOL" -eq 0 ]; then
-    assemble_mrbayes_block_from_partitionfinder_results $tmpFOLDER $mbOUTFILE
-    if [ $verboseBOOL -eq 1 ]; then
-    echo -ne " INFO  | $(get_current_time) | Assembling new NEXUS file from PartitionFinder results\n"
-    fi
-    assemble_new_nexus_from_partitionfinder_results $tmpFOLDER $dataBlock $newNexFil
+if [ \( "$typMDLTST" = "partitionfinder" \) -o \( "$typMDLTST" = "partitiontest" \) ]; then
+    #assemble_mrbayes_block_from_partitionfinder_results $tmpFOLDER $mbOUTFILE
+    
+    # REPLACE WITH A FUNCTION THAT MATCHES THE SUBSET NAMES WITH THE PARTITIONS IN temp_NewCharsetLns
+    echo "Function Missing!"
+    exit 1
+else
+    assemble_mrbayes_block_general $tmpFOLDER $mbOUTFILE $lsetDefns $setsBlock $reformCFG
 fi
 
 ########################################################################
