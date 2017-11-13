@@ -590,10 +590,7 @@ convert_models_into_lset()
         exit 1
     fi
 
-    # STEP 1: Extract charset lines from SETS-block
-    # Foo bar
-
-    # STEP 2: Convert the model names to lset definitions
+    # STEP 1: Convert the model names to lset definitions
     while read LINE
     do
         partit_name=$(echo "$LINE" | awk '{print $1}')
@@ -627,34 +624,17 @@ convert_models_into_lset()
             LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/\;}
         fi
         
-        echo "$LINE [# $partit_name ]" >> ./$1/$3
+        echo "$LINE [# $partit_name ]" >> ./$1/$3 # NOTE: Make sure that $partit_name is followed by a whitespace before the closing bracket!
     done < ./$1/$2
 
-    # STEP 3: Replace the partition names in the lset definitions with the line numbers in the charsets
+    # STEP 2: Replace the partition names in the lset definitions with the line numbers in the charsets
     # NOTE: THIS IS WHY ORDERED PARTITIONS ARE CRITICAL!
     charsetLines=$(cat ./$1/$4 | grep 'charset')
     for partitName in $(echo "$charsetLines" | awk '{print $2}'); do
+        # Add a whitespace to end as number delimiter; otherwise "Subset1" also replaces for example "Subset10"
         lineNumbr=$(echo "$charsetLines" | awk '/'$partitName'/{print NR; exit}') # Finding partitName in charsetLines to identify line number
-        sed -i "/$partitName/ s/applyto\=()/applyto\=($lineNumbr)/" ./$1/$3 # Double quotes are critical here due to variable
+        sed -i "/\<$partitName\>/ s/applyto\=()/applyto\=($lineNumbr)/" ./$1/$3 # NOTE: The \<...\> makes a pattern match word boundaries. This way "foo10" will not be matched by /\<foo1\>/, only the complete word "foo1".
     done
-}
-
-update_setsblock_after_partitionfinding()
-#   This function splits a NEXUS file into individual blocks.
-#   INP:  $1: path to temp folder ($tmpFOLDER)
-#         $2: name of file with best models ($bestModls)
-#         $3: name of file containing the extracted SETS-block ($orgSetsBlock)
-#   OUP:  file with a SETS-block
-{
-    # INTERNAL FUNCTION CHECKS
-    (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
-    for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
-        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
-    done
-    
-    # Foo bar baz
-    
 }
 
 ########################################################################
@@ -1066,7 +1046,7 @@ modeltesting_via_partitiontest()
         exit 1
     fi
     
-    # Adjusting for current bug in partitiontest (output not saved to path specified in config file)
+    # Adjusting for current bug in partitiontest (output cannot be saved to an existing folder; specification of path in outfolder thus not useful)
     mv partest_$4 ./$1 # Moving outfile to tmpFolder
 }
 
@@ -1091,7 +1071,6 @@ write_partitiontest_config_file()
     # USING CONFIG TEMPLATE
     CMDline=$(grep -A1 --ignore-case '^%PARTITIONTEST_CFG:' ./$1/$2 | tail -n1)
     charsetLines=$(echo "$charsetLines" | sed "s/charset //" | sed "s/\;//")
-    CMDline=${CMDline//\[OUT_PATH\]/.\/$1\/} # Substitution with Bash's built-in parameter expansion
     CMDline=${CMDline//\[LIST_OF_DATA_BLOCKS\]/$charsetLines}
 
     # Setting userscheme-only search
