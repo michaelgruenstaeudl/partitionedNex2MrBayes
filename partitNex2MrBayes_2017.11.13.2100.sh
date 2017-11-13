@@ -33,7 +33,7 @@ RUNTIME_start_pp=$(date '+%Y.%m.%d.%H%M')
 # Initialize variables to default values
 OPT_A="name of, and file path to, the input NEXUS file"
 OPT_B="name of, and file path to, the input config file"
-OPT_C="name of partitionfinding / modeltesting software tool (available: jmodeltest, partitionfinder, partitiontest, sms)"
+OPT_C="name of partitionfinding / modeltesting software tool (available: jmodeltest, modeltest_ng, partitionfinder, partitiontest, sms)"
 OPT_D="name of, and file path to, the modeltesting binary or script"
 OPT_E="name of, and file path to, the output file"
 keepflsBOOL=0
@@ -53,7 +53,7 @@ function my_help {
     echo "MANDATORY command line switches:"
     echo "${REV}-f${NORM}  --Sets name of, and file path to, ${BOLD}NEXUS file${NORM}. No default exists."
     echo "${REV}-c${NORM}  --Sets name of, and file path to, ${BOLD}config file${NORM}. No default exists."
-    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of partitionfinding / modeltesting software tool. Available: jmodeltest, partitionfinder, partitiontest, sms. No default exists."
+    echo "${REV}-t${NORM}  --Sets ${BOLD}type${NORM} of partitionfinding / modeltesting software tool. Available: jmodeltest, modeltest_ng, partitionfinder, partitiontest, sms. No default exists."
     echo "${REV}-b${NORM}  --Sets name of, and file path to, the modeltesting ${BOLD}binary or script${NORM}. No default exists."
     echo "${REV}-o${NORM}  --Sets name of, and file path to, ${BOLD}output file${NORM}. No default exists."
     echo ""
@@ -496,7 +496,8 @@ assemble_new_blocks_given_partition_scheme()
             # Extract matrix from partition
             partitMatrix=$(cat $newPartit | sed -n '/matrix/{:a;n;/;/b;p;ba}' | awk '{print $2}' | sed -e 's/^[ \t]*//') # NOTE: "sed -e 's/^[ \t]*//'" removes leading whitespaces
             # Generating new charset lines
-            charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $3"_"$4}')
+            #charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $3"_"$4}')
+            charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $4}')
             charsetLine=$(echo "charset $charsetName")
             if [ $nucleotideCounter -eq 0 ]; then # NOTE: Counting starts at zero for length measurement, but at 1 for index positions
                 charsetLine+=$(echo " = 1-")
@@ -614,7 +615,7 @@ convert_models_into_lset()
             PRELINE=$(echo "lset applyto=() nst=6 [INVGM_PLACEHOLDER]")
         fi
         # INVGAMMA SETTINGS
-        if [ "$model_invgm" == "+I" ]; then # IMPORTANT: Don't use quotation marks around variable $model_invgm, to avoid inclusion of newline characters into comparison
+        if [ "$model_invgm" == "+I" ]; then
             LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/rates\=propinv\;} # Substitution with Bash's built-in parameter expansion;
         elif [ "$model_invgm" == "+G" ]; then
             LINE=${PRELINE//\[INVGM_PLACEHOLDER\]/rates\=gamma\;}
@@ -659,8 +660,10 @@ extract_modelinfo_from_jmodeltest()
     count=$(ls -1 ./$1/*.bestModel 2>/dev/null | wc -l)
     if [ $count != 0 ]; then
         for file in ./$1/*.bestModel; do 
-            echo -ne "$(basename $file)" | sed 's/partition_//g' | sed 's/\.bestModel//g' >> ./$1/$2
-            bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed -n 's/.*Model \= \([^ ]*\).*/\1/p' 2>/dev/null) # Parse best model from jModeltest output
+            #echo -ne "$(basename $file)" | sed 's/original_partition_//g' | sed 's/\.bestModel//g' >> ./$1/$2
+            echo -ne "$(basename $file)" | awk -F'_' '{print $4}' | sed 's/\.bestModel//g' | tr -d '\n' >> ./$1/$2
+            # Parse best model from jModeltest output
+            bestModel=$(cat "$file" | grep -A1 ' Model selected:' | tail -n1 | sed -n 's/.*Model \= \([^ ]*\).*/\1/p' 2>/dev/null)
             if [ ! -z "$bestModel" ]; then
                 echo " $bestModel" >> ./$1/$2  # NOTE: model has to be preceeded by one space!
             else
@@ -717,6 +720,92 @@ modeltesting_via_jmodeltest()
 ########################################################################
 ########################################################################
 
+# FUNCTIONS SPECIFIC TO 'MODELTEST_NG'
+
+extract_modelinfo_from_modeltest_ng()
+#   This function extracts modelinfo from the output of modeltest-ng; the output was saved into logfiles ending with the name ".bestModel"
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of file to collect bestfit model per partition ($bestModls)
+#         $3: name of config file ($reformatedCFG)
+#         $4: boolean variable if verbose or not ($verboseBOOL)
+#   OUP:  writes output to model overview file
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+    
+    # Specifying selection criterion
+    selectCrit=$(grep -A1 --ignore-case '^%MODELTEST_NG_CFG:' ./$1/$3 | tail -n1 | awk '{$1=$1;print}' | awk '{print $1}')
+    # Extracting info
+    count=$(ls -1 ./$1/*.bestModel 2>/dev/null | wc -l)
+    if [ $count != 0 ]; then
+        for file in ./$1/*.bestModel; do 
+            #echo -ne "$(basename $file)" | sed 's/original_partition_//g' | sed 's/\.phy\.bestModel//g' >> ./$1/$2
+            echo -ne "$(basename $file)" | awk -F'_' '{print $4}' | sed 's/\.phy\.bestModel//g' | tr -d '\n' >> ./$1/$2
+            # Parse best model from modeltest-ng output
+            kw1="Summary:"
+            kw2="Execution results"
+            regOfInt=$(cat "$file" | sed -n "/$kw1/,/$kw2/p" | awk '{$1=$1;print}')
+            bestModel=$(echo "$regOfInt" | grep "^$selectCrit" | awk '{print $2}' | head -n1)
+            if [ ! -z "$bestModel" ]; then
+                echo " $bestModel" >> ./$1/$2  # NOTE: model has to be preceeded by one space!
+            else
+                echo " GTR+I+G" >> ./$1/$2  # If error in modeltesting or parsing, set GTR+I+G as default model
+                if [ $4 -eq 1 ]; then
+                    echo -ne " WARN  | $(get_current_time) | No model extracted from file $file; setting model GTR+I+G as replacement.\n"
+                fi
+            fi
+        done
+    else
+        echo -ne " ERROR | $(get_current_time) | No result files of the modeltesting (*.bestModel) found.\n"
+        exit 1
+    fi
+}
+
+modeltesting_via_modeltest_ng()
+#   This function conducts modeltesting via modeltest-ng for a series of input files; these input files start with the name "partition_"
+#   INP:  $1: path to temp folder ($tmpFOLDER)
+#         $2: name of jModeltest binary ($BinMDLTST)
+#         $3: name of config file ($reformatedCFG)
+#         $4: boolean variable if verbose or not ($verboseBOOL)
+#   OUP:  none; generates *.bestModel* output files in temp folder
+{
+    # INTERNAL FUNCTION CHECKS
+    (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    for ((i=1; i<=$#; i++)); do
+        argVal="${!i}"
+        [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+    done
+
+    # USING CONFIG TEMPLATE
+    CMDline=$(grep -A1 --ignore-case '^%MODELTEST_NG_CMDLINE:' ./$1/$3 | tail -n1)
+    CMDline=${CMDline//\[PATH_TO_MODELTEST_NG\]/$2} # Substitution with Bash's built-in parameter expansion
+    CMDline=$(eval echo $CMDline)
+    # MODELTESTING
+    count=$(ls -1 ./$1/original_partition_*.phy 2>/dev/null | wc -l)
+    if [ $count != 0 ]; then
+        for partit in ./$1/original_partition_*.phy; do
+        partit_RUNTIME_start=$(date +%s)
+        coreCMD=${CMDline//\[PARTITION_NAME\]/$partit} # Substitution with Bash's built-in parameter expansion; # NOTE: Don't overwrite the variable $CMDline to perform different substitutions in each loop, instead save it as a new variable ($coreCMD)
+        eval "$coreCMD 1>${partit}.bestModel 2>&1" # Executin of main_cmd
+        partit_RUNTIME_dur=$(bc -l <<< "($(date +%s)-$partit_RUNTIME_start)/60")
+        LC_ALL=C partit_RUNTIME_dur_pp=$(printf "%.3f minutes\n" $partit_RUNTIME_dur)
+        if [ $4 -eq 1 ]; then
+            echo -ne " INFO  | $(get_current_time) |   Processing complete for partition: $(basename $partit); Execution time: $partit_RUNTIME_dur_pp\n"
+        fi
+        done
+    else
+        echo -ne " ERROR | $(get_current_time) | No partition files (original_partition_*) found.\n"
+        exit 1
+    fi
+}
+
+########################################################################
+########################################################################
+
 # FUNCTIONS SPECIFIC TO 'SMS'
 
 extract_modelinfo_from_sms()
@@ -736,8 +825,10 @@ extract_modelinfo_from_sms()
     count=$(ls -1 ./$1/*_sms.csv 2>/dev/null | wc -l)
     if [ $count != 0 ]; then
         for file in ./$1/*_sms.csv; do 
-            echo -ne "$(basename $file)" | sed 's/partition_//g' | sed 's/\_sms\.csv//g' >> ./$1/$2
-            bestModel=$(cat "$file" | grep -A1 'Model;Decoration' | tail -n1 | awk -F';' '{print $1$2}' 2>/dev/null) # Parse best model from SMS output
+            #echo -ne "$(basename $file)" | sed 's/original_partition_//g' | sed 's/\_sms\.csv//g' >> ./$1/$2
+            echo -ne "$(basename $file)" | awk -F'_' '{print $4}' | sed 's/\_sms\.csv//g' | tr -d '\n' >> ./$1/$2
+            # Parse best model from SMS output
+            bestModel=$(cat "$file" | grep -A1 'Model;Decoration' | tail -n1 | awk -F';' '{print $1$2}' 2>/dev/null)
             if [ ! -z "$bestModel" ]; then
                 echo " $bestModel" >> ./$1/$2  # NOTE: model has to be preceeded by one space!
             else
@@ -1210,7 +1301,7 @@ if [ $verboseBOOL -eq 1 ]; then
     echo -ne " INFO  | $(get_current_time) | Preparing files for partitionfinding / modeltesting\n"
 fi
 
-if [ "$typMDLTST" = "sms" ]; then
+if [ \( "$typMDLTST" = "modeltest_ng" \) -o \( "$typMDLTST" = "sms" \) ]; then
     for partit in ./$tmpFOLDER/original_partition_*; do
         partit_ncharVar=$(grep ^dimensions $partit | sed -n 's/.*nchar=\([^;]*\).*/\1/p') # Extract number of characters in partition
         partit_name=$(basename $partit) # Because convert_datablock_to_phylip() concatenates path and filename, I need to extract basename of infile here
@@ -1235,6 +1326,8 @@ fi
 
 if [ "$typMDLTST" = "jmodeltest" ]; then
     modeltesting_via_jmodeltest $tmpFOLDER $BinMDLTST $reformatedCFG $verboseBOOL
+elif [ "$typMDLTST" = "modeltest_ng" ]; then
+    modeltesting_via_modeltest_ng $tmpFOLDER $BinMDLTST $reformatedCFG $verboseBOOL
 elif [ "$typMDLTST" = "sms" ]; then
     modeltesting_via_sms $tmpFOLDER $BinMDLTST $reformatedCFG $verboseBOOL
 elif [ "$typMDLTST" = "partitionfinder" ]; then
@@ -1252,6 +1345,8 @@ fi
 
 if [ "$typMDLTST" = "jmodeltest" ]; then
     extract_modelinfo_from_jmodeltest $tmpFOLDER $bestModls $verboseBOOL
+elif [ "$typMDLTST" = "modeltest_ng" ]; then
+    extract_modelinfo_from_modeltest_ng $tmpFOLDER $bestModls $reformatedCFG $verboseBOOL
 elif [ "$typMDLTST" = "sms" ]; then
     extract_modelinfo_from_sms $tmpFOLDER $bestModls $verboseBOOL
 elif [ "$typMDLTST" = "partitionfinder" ]; then
@@ -1285,6 +1380,15 @@ if [ \( "$typMDLTST" = "partitionfinder" \) -o \( "$typMDLTST" = "partitiontest"
     fi
     split_matrix_into_partitions $tmpFOLDER $orgDataBlock $tmpSetsBlock "new"
     assemble_new_blocks_given_partition_scheme $tmpFOLDER $orgDataBlock "new" $tmpSetsBlock $newDataBlock $newSetsBlock
+
+    # Writing new NEXUS output
+    if [ $verboseBOOL -eq 1 ]; then
+        echo -ne " INFO  | $(get_current_time) | Writing new NEXUS output file.\n"
+    fi
+    echo -e "#NEXUS\n" > $newNexFil
+    echo -e "\n$(cat $tmpFOLDER/$newDataBlock)\n" >> $newNexFil
+    echo -e "\n$(cat $tmpFOLDER/$newSetsBlock)\n" >> $newNexFil
+    echo -e "\n[\nBest-fitting models identified:\n$(cat $tmpFOLDER/$bestModls)\n]\n" >> $newNexFil
 fi
 
 ########################################################################
