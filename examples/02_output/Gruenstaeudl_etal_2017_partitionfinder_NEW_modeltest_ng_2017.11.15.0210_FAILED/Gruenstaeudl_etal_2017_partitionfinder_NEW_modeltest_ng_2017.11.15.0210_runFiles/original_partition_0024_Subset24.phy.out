@@ -1,0 +1,175 @@
+--------------------------------------------------------------------------------
+Input data:
+  MSA:        ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy
+  Tree:       Maximum parsimony
+    file:           -
+  #taxa:            15
+  #sites:           933
+  #patterns:        107
+  Max. thread mem:  0 MB
+
+Output:
+  Log:           ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy.log
+  Starting tree: ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy.tree
+  Results:       ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy.out
+
+Selection options:
+  # dna schemes:      3
+  # dna models:       24
+  include model parameters:
+    Uniform:         true
+    p-inv (+I):      true
+    gamma (+G):      true
+    both (+I+G):     true
+    fixed freqs:     true
+    estimated freqs: true
+    #categories:     4
+  asc bias:           none
+  epsilon (opt):      0.01
+  epsilon (par):      0.01
+
+Additional options:
+  verbosity:        very low
+  threads:          1/2
+  RNG seed:         12345
+  subtree repeats:  disabled
+--------------------------------------------------------------------------------
+
+BIC       model              K            lnL          score          delta    weight
+--------------------------------------------------------------------------------
+       1  HKY+I              5     -2101.8895      4422.6080         0.0000    0.5278
+       2  HKY+G              5     -2102.1664      4423.1618         0.5538    0.4001
+       3  GTR+I              9     -2090.8382      4427.8589         5.2509    0.0382
+       4  GTR+G              9     -2091.2164      4428.6154         6.0074    0.0262
+       5  HKY+I+G            6     -2102.8731      4431.4136         8.8056    0.0065
+       6  GTR+I+G           10     -2090.8595      4434.7399        12.1319    0.0012
+       7  K80+I              2     -2122.4697      4443.2531        20.6451    0.0000
+       8  K80+G              2     -2122.6094      4443.5325        20.9245    0.0000
+       9  K80+I+G            3     -2123.3073      4451.7668        29.1588    0.0000
+      10  SYM+I              6     -2115.1124      4455.8922        33.2842    0.0000
+--------------------------------------------------------------------------------
+Best model according to BIC
+---------------------------
+Model:              HKY+I
+lnL:                -2101.8895
+Frequencies:        0.3015 0.2033 0.1986 0.2966 
+Subst. Rates:       1.0000 4.2891 1.0000 1.0000 4.2891 1.0000 
+Inv. sites prop:    0.7055
+Gamma shape:        -
+Score:              4422.6080
+Weight:             0.5278
+---------------------------
+Parameter importances
+---------------------------
+P.Inv:              0.5660
+Gamma:              0.4263
+Gamma-Inv:          0.0077
+Frequencies:        1.0000
+---------------------------
+Model averaged estimates
+---------------------------
+P.Inv:              0.7041
+Alpha:              0.1429
+Alpha-P.Inv:        16.8711
+P.Inv-Alpha:        0.5607
+Frequencies:        0.3017 0.2029 0.1985 0.2970 
+
+Commands:
+  > phyml  -i ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m 010010 -f m -v e -a 0 -c 1 -o tlr
+  > raxmlHPC-SSE3 -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -c 1 -m GTRCATIX -n EXEC_NAME -p PARSIMONY_SEED
+  > raxml-ng --msa ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy --model HKY+I
+  > paup -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy
+  > iqtree -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m HKY+I
+
+AIC       model              K            lnL          score          delta    weight
+--------------------------------------------------------------------------------
+       1  GTR+I              9     -2090.8382      4253.6763         0.0000    0.4886
+       2  GTR+G              9     -2091.2164      4254.4328         0.7565    0.3347
+       3  GTR+I+G           10     -2090.8595      4255.7189         2.0426    0.1759
+       4  HKY+I              5     -2101.8895      4267.7790        14.1027    0.0004
+       5  HKY+G              5     -2102.1664      4268.3328        14.6565    0.0003
+       6  HKY+I+G            6     -2102.8731      4271.7462        18.0699    0.0001
+       7  SYM+I              6     -2115.1124      4296.2248        42.5485    0.0000
+       8  SYM+G              6     -2115.3161      4296.6322        42.9559    0.0000
+       9  GTR                8     -2114.4210      4298.8420        45.1657    0.0000
+      10  SYM+I+G            7     -2115.9457      4299.8915        46.2152    0.0000
+--------------------------------------------------------------------------------
+Best model according to AIC
+---------------------------
+Model:              GTR+I
+lnL:                -2090.8382
+Frequencies:        0.3042 0.1956 0.1958 0.3043 
+Subst. Rates:       1.9808 4.6000 0.1692 1.9096 4.8380 1.0000 
+Inv. sites prop:    0.6840
+Gamma shape:        -
+Score:              4253.6763
+Weight:             0.4886
+---------------------------
+Parameter importances
+---------------------------
+P.Inv:              0.4890
+Gamma:              0.3350
+Gamma-Inv:          0.1760
+Frequencies:        1.0000
+---------------------------
+Model averaged estimates
+---------------------------
+P.Inv:              0.6840
+Alpha:              0.1778
+Alpha-P.Inv:        99.9538
+P.Inv-Alpha:        0.6820
+Frequencies:        0.3041 0.1956 0.1959 0.3043 
+
+Commands:
+  > phyml  -i ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m 012345 -f m -v e -a 0 -c 1 -o tlr
+  > raxmlHPC-SSE3 -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -c 1 -m GTRCATIX -n EXEC_NAME -p PARSIMONY_SEED
+  > raxml-ng --msa ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy --model GTR+I
+  > paup -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy
+  > iqtree -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m GTR+I
+
+AICc      model              K            lnL          score          delta    weight
+--------------------------------------------------------------------------------
+       1  GTR+I              9     -2090.8382      4256.6495         0.0000    0.4955
+       2  GTR+G              9     -2091.2164      4257.4060         0.7565    0.3394
+       3  GTR+I+G           10     -2090.8595      4258.8608         2.2113    0.1640
+       4  HKY+I              5     -2101.8895      4270.1257        13.4762    0.0006
+       5  HKY+G              5     -2102.1664      4270.6795        14.0300    0.0004
+       6  HKY+I+G            6     -2102.8731      4274.2423        17.5928    0.0001
+       7  SYM+I              6     -2115.1124      4298.7209        42.0714    0.0000
+       8  SYM+G              6     -2115.3161      4299.1283        42.4788    0.0000
+       9  GTR                8     -2114.4210      4301.6514        45.0019    0.0000
+      10  SYM+I+G            7     -2115.9457      4302.5418        45.8923    0.0000
+--------------------------------------------------------------------------------
+Best model according to AICc
+---------------------------
+Model:              GTR+I
+lnL:                -2090.8382
+Frequencies:        0.3042 0.1956 0.1958 0.3043 
+Subst. Rates:       1.9808 4.6000 0.1692 1.9096 4.8380 1.0000 
+Inv. sites prop:    0.6840
+Gamma shape:        -
+Score:              4256.6495
+Weight:             0.4955
+---------------------------
+Parameter importances
+---------------------------
+P.Inv:              0.4961
+Gamma:              0.3399
+Gamma-Inv:          0.1641
+Frequencies:        1.0000
+---------------------------
+Model averaged estimates
+---------------------------
+P.Inv:              0.6840
+Alpha:              0.1778
+Alpha-P.Inv:        99.9414
+P.Inv-Alpha:        0.6820
+Frequencies:        0.3041 0.1956 0.1959 0.3043 
+
+Commands:
+  > phyml  -i ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m 012345 -f m -v e -a 0 -c 1 -o tlr
+  > raxmlHPC-SSE3 -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -c 1 -m GTRCATIX -n EXEC_NAME -p PARSIMONY_SEED
+  > raxml-ng --msa ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy --model GTR+I
+  > paup -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy
+  > iqtree -s ./Gruenstaeudl_etal_2017_partitionfinder_NEW_modeltest_ng_2017.11.15.0210_runFiles/original_partition_0024_Subset24.phy -m GTR+I
+Done

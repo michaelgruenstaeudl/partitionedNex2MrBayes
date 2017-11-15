@@ -1,0 +1,95 @@
+### ! RUN THIS SCRIPT IN THE FOLDER WITH THE INFILE ! ###
+
+########################################################################
+
+#INFILE=Crawford_etal_2012.nex
+#INFILE=Faircloth_etal_2013.nex
+#INFILE=Fong_etal_2012.nex
+INFILE=Gruenstaeudl_etal_2017.nex
+#INFILE=Leache_etal_2015.nex
+#INFILE=McCormack_etal_2013.nex
+#INFILE=Meiklejohn_etal_2016.nex
+#INFILE=Richart_etal_2015.nex
+#INFILE=Smith_etal_2014.nex
+#INFILE=tiny.nex
+#INFILE=Wainwright_etal_2012.nex
+
+########################################################################
+
+INFSTEM=${INFILE%.nex*}
+PN2MB=partitNex2MrBayes_2017.11.13.2100.sh
+SCRIPT_DIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes
+WORKING_DIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes/examples/01_input
+
+PATH_TO_SMS=/home/michael_science/git/sms-1.8.1/sms.sh
+PATH_TO_JMODELTEST=/home/michael_science/binaries/jModelTest_2.1.7/jModelTest.jar
+PATH_TO_MODELTEST_NG=/home/michael_science/binaries/modeltest-ng/modeltest-ng
+PATH_TO_PARTEST=/usr/local/bin/partest
+PATH_TO_PARTITIONFINDER=/home/michael_science/git/partitionfinder/PartitionFinder.py
+
+#################################################################################################################
+#################################################################################################################
+
+MDLTSTTYP=sms
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_SMS -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
+
+MDLTSTTYP=jmodeltest
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_JMODELTEST -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
+
+MDLTSTTYP=modeltest_ng
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_MODELTEST_NG -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
+
+MDLTSTTYP=partitiontest
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTEST -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
+
+MDLTSTTYP=partitionfinder
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTITIONFINDER -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+#################################################################################################################
+#################################################################################################################
+
+MDLTSTTYP=partitiontest  # userscheme
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_userscheme_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTEST -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k -u > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
+
+MDLTSTTYP=partitionfinder  # userscheme
+STRTTME=$(date '+%Y.%m.%d.%H%M')
+OUTSTEM=${INFSTEM}_${MDLTSTTYP}_userscheme_${STRTTME}
+bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTITIONFINDER -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k -u > $WORKING_DIR/${OUTSTEM}.log
+mkdir -p $WORKING_DIR/$OUTSTEM
+mv $WORKING_DIR/${OUTSTEM}* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+
+########################################################################
