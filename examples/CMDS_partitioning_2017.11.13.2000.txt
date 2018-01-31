@@ -2,32 +2,33 @@
 
 ########################################################################
 
-PN2MB=partitNex2MrBayes_2017.11.13.2100.sh
-SCRIPT_DIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes
-WORKING_DIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes/examples/01_input
+PN2MB=partitNex2MrBayes.sh
+SCRIPTDIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes
+WORKDIR=/home/michael_science/git/michaelgruenstaeudl_partitNex2MrBayes/examples/01_input
 
 PATH_TO_PARTEST=/usr/local/bin/partest
 PATH_TO_PARTITIONFINDER=/home/michael_science/git/partitionfinder/PartitionFinder.py
 
 ########################################################################
 
-for INFILE in Fong_etal_2012.nex Gruenstaeudl_etal_2017.nex Richart_etal_2015.nex Wainwright_etal_2012.nex; do
+#for INFILE in Fong_etal_2012.nex Gruenstaeudl_etal_2017.nex Richart_etal_2015.nex Wainwright_etal_2012.nex; do
+for INFILE in Leache_etal_2015.nex McCormack_etal_2013.nex Meiklejohn_etal_2016.nex Smith_etal_2014.nex; do
 
     INFSTEM=${INFILE%.nex*}
 
-    MDLTSTTYP=partitiontest
+    MDLTSTTYPE=partitiontest
     STRTTME=$(date '+%Y.%m.%d.%H%M')
-    OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
-    bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTEST -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
-    mkdir -p $WORKING_DIR/$OUTSTEM
-    mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+    OUTSTEM=${INFSTEM}_${MDLTSTTYPE}_${STRTTME}
+    bash $SCRIPTDIR/$PN2MB -f $WORKDIR/$INFILE -c $SCRIPTDIR/partitNex2MrBayes.cfg -t $MDLTSTTYPE -b $PATH_TO_PARTEST -o $WORKDIR/${OUTSTEM}.mrbayes -v -k > $WORKDIR/${OUTSTEM}.log
+    mkdir -p $WORKDIR/$OUTSTEM
+    mv $WORKDIR/${OUTSTEM}.* $WORKDIR/$OUTSTEM/ && mv $WORKDIR/${OUTSTEM}_* $WORKDIR/$OUTSTEM/
 
-    MDLTSTTYP=partitionfinder
+    MDLTSTTYPE=partitionfinder
     STRTTME=$(date '+%Y.%m.%d.%H%M')
-    OUTSTEM=${INFSTEM}_${MDLTSTTYP}_${STRTTME}
-    bash $SCRIPT_DIR/$PN2MB -f $WORKING_DIR/$INFILE -c $SCRIPT_DIR/partitNex2MrBayes.cfg -t $MDLTSTTYP -b $PATH_TO_PARTITIONFINDER -o $WORKING_DIR/${OUTSTEM}.mrbayes -v -k > $WORKING_DIR/${OUTSTEM}.log
-    mkdir -p $WORKING_DIR/$OUTSTEM
-    mv $WORKING_DIR/${OUTSTEM}.* $WORKING_DIR/$OUTSTEM/ && mv $WORKING_DIR/${OUTSTEM}_* $WORKING_DIR/$OUTSTEM/
+    OUTSTEM=${INFSTEM}_${MDLTSTTYPE}_${STRTTME}
+    bash $SCRIPTDIR/$PN2MB -f $WORKDIR/$INFILE -c $SCRIPTDIR/partitNex2MrBayes.cfg -t $MDLTSTTYPE -b $PATH_TO_PARTITIONFINDER -o $WORKDIR/${OUTSTEM}.mrbayes -v -k > $WORKDIR/${OUTSTEM}.log
+    mkdir -p $WORKDIR/$OUTSTEM
+    mv $WORKDIR/${OUTSTEM}.* $WORKDIR/$OUTSTEM/ && mv $WORKDIR/${OUTSTEM}_* $WORKDIR/$OUTSTEM/
 
 done
 
