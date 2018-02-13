@@ -19,8 +19,8 @@ Software tools for inferring best-fitting nucleotide substitution models wrapped
 * Modeltest-NG (link here)
 
 
-Details of the analysis process of *partitNex2MrBayes*
-------------------------------------------------------
+Analysis process of *partitNex2MrBayes*
+---------------------------------------
 
 ### 1. Evaluation of presence and contiguity of charset definitions
 Several evaluations regarding charset definitions are performed during the execution of the script. 
@@ -36,25 +36,47 @@ The script can be executed to call one of several software tools for inferring b
 ### 3. Output is MrBayes-ready
 Under each choice, a MrBayes command block is appended to the reassembled NEXUS file which specifies the partition and substitution model definitions. Thus, the output can be loaded into MrBayes without further adjustments.
 
+Control of *partitNex2MrBayes*
+------------------------------
+
+Analyses conducted via *partitNex2MrBayes* are controlled by
+(a) commandline parameters during script execution, and
+(b) a configuration file (default: *partitNex2MrBayes.cfg*).
+
+The configuration file controls the settings of the third-party software tools that *partitNex2MrBayes* wraps and calls for analysis. These settings include the choice of optimality criterion (e.g., AIC, AICc, BIC) and the choice of search algorithm (e.g., greedy, heuristic clustering) and are largely idiosyncratic to the wrapped software tool.
+
 
 Input/Output of *partitNex2MrBayes*
 ----------------------------------
 
-### Input arguments
-* __`input data file`__: name of, and file path to, the input NEXUS file
-* __`input config file`__: name of, and file path to, the input CONFIG file
-* __`modeltesting type`__: name of modeltesting tool used (available: jmodeltest, partitionfinder, sms)
-* __`modeltesting tool`__: name of, and file path to, the modeltesting binary or script
-* __`output file`__: name of, and file path to, the output file
+### Input
 
-### Output:
-* __`MRBAYES file`__: a NEXUS file ready for analysis with MrBayes
+#### Mandatory commandline arguments
+* __`input data file`__ (commandline option __`-f`__): name of, and file path to, the input NEXUS file. No default exists.
+* __`input config file`__ (commandline option __`-c`__): name of, and file path to, the input CONFIG file. No default exists.
+* __`modeltesting type`__ (commandline option __`-t`__): name of partitionfinding/modeltesting tool selected. Available: jmodeltest, modeltest_ng, partitionfinder, partitiontest, sms. No default exists.
+* __`modeltesting tool`__ (commandline option __`-b`__): name of, and file path to, the partitionfinding/modeltesting binary or script. No default exists.
+* __`output file`__ (commandline option __`-b`__): name of, and file path to, the output file. No default exists.
+
+#### Optional commandline switches
+* commandline switch __`-u`__: Estimating model fit only for the user-defined partitioning scheme. Only applicable for PartitionFinder. Default is off.
+* commandline switch __`-k`__: Keeping temporary files. Default is off.
+* commandline switch __`-v`__: Displays verbose status messages. Default is off.
+
+
+### Output
+* __`MRBAYES file`__: an output NEXUS file ready for analysis with MrBayes. The file comprises a DATA block, a commented-out SETS Block and a MRBAYES block.
+
+
+Example Usage
+-------------
+
+``` Foo bar baz ```
 
 
 Current Issues
 --------------
-
-Foo bar baz
+* 2017-11: Modeltest-NG crashes at times. The script *partitNex2MrBayes* does not recognize such a crash and waits indefinitely. (Note to self: Solve this issue by having a maximum execution time and by selecting the general GTR+I+G model by default in case of such a crash.) 
 
 
 Status
