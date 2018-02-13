@@ -10,13 +10,13 @@ Description of *partitNex2MrBayes*
 *partitNex2MrBayes* is a [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) script to convert a  multisequence DNA alignment in [NEXUS](https://en.wikipedia.org/wiki/Nexus_file) format (hereafter 'matrix') that contains character set definitions (hereafter 'charsets') into a partitioned DNA matrix in NEXUS format ready for analysis with [MrBayes](https://mrbayes.sourceforge.net). The script hereby wraps and calls third-party software tools for inferring optimal data partitioning schemes and best-fitting nucleotide substitution models.
 
 Software tools for inferring optimal data partitioning schemes wrapped by *partitNex2MrBayes*:
-* PartitionFinder2 (link here)
-* PartitionTest (link here)
+* PartitionFinder2 (https://github.com/brettc/partitionfinder)
+* PartitionTest (https://github.com/ddarriba/partitiontest)
 
 Software tools for inferring best-fitting nucleotide substitution models wrapped by *partitNex2MrBayes*:
-* jModelTest (link here)
-* SmartModelSelection (link here)
-* Modeltest-NG (link here)
+* jModelTest (https://github.com/ddarriba/jmodeltest2)
+* SmartModelSelection (http://www.atgc-montpellier.fr/sms/binaries.php)
+* Modeltest-NG (https://github.com/ddarriba/modeltest)
 
 
 Analysis process of *partitNex2MrBayes*
