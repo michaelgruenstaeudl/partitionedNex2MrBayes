@@ -19,9 +19,10 @@ Software tools for inferring best-fitting nucleotide substitution models wrapped
 * Modeltest-NG (https://github.com/ddarriba/modeltest)
 
 
-For the impatient - Installing and running partitionedNex2MrBayes
+For the impatient - Installing and running *partitionedNex2MrBayes*
 -----------------------------------------------------------------
 
+##### Getting *partitionedNex2MrBayes*
 ```
 # Setting up temp directory
 WORKDIR=/home/mi/Desktop/myTest
@@ -30,6 +31,13 @@ cd $WORKDIR
 # Get partitionedNex2MrBayes
 git clone https://github.com/michaelgruenstaeudl/partitionedNex2MrBayes.git
 
+# Set paths
+PN2MB_SH=$WORKDIR/partitionedNex2MrBayes/partitNex2MrBayes.sh
+PN2MB_CFG=$WORKDIR/partitionedNex2MrBayes/partitNex2MrBayes.cfg
+```
+
+##### Analysis for inferring optimal data partitioning scheme
+```
 # Get partitionfinder
 git clone https://github.com/brettc/partitionfinder.git
 pip2.7 install --user numpy
@@ -39,24 +47,34 @@ pip2.7 install --user pyparsing
 pip2.7 install --user scipy
 pip2.7 install --user sklearn
 
-# Get jmodeltest
-wget https://github.com/ddarriba/jmodeltest2/files/157117/jmodeltest-2.1.10.tar.gz
-tar xzf jmodeltest-2.1.10.tar.gz
-
 # Set paths
-PATH_TO_JMODELTEST=$PWD/jmodeltest-2.1.10/jModelTest.jar
 PATH_TO_PARTITIONFINDER=$PWD/partitionfinder/PartitionFinder.py
-
-# Run partitionedNex2MrBayes
-INFILE=$WORKDIR/partitionedNex2MrBayes/examples/01_input/tiny.nex
-PN2MB_SH=$WORKDIR/partitionedNex2MrBayes/partitNex2MrBayes.sh
-PN2MB_CFG=$WORKDIR/partitionedNex2MrBayes/partitNex2MrBayes.cfg
-
 MDLTSTTYPE=partitionfinder
+
+# Execute analysis
+INFILE=$WORKDIR/partitionedNex2MrBayes/examples/01_input/tiny.nex
 OUTSTEM=${INFILE%.nex*}_${MDLTSTTYPE}
 
 cd $WORKDIR/partitionedNex2MrBayes/examples/01_input/
 bash $PN2MB_SH -f $INFILE -c $PN2MB_CFG -t $MDLTSTTYPE -b $PATH_TO_PARTITIONFINDER -o ${OUTSTEM}.mrbayes -v -k > ${OUTSTEM}.log
+```
+
+##### Analysis for inferring best-fitting nucleotide substitution models
+```
+# Get jmodeltest
+wget https://github.com/ddarriba/jmodeltest2/files/157117/jmodeltest-2.1.10.tar.gz
+tar xzf jmodeltest-2.1.10.tar.gz
+
+# Set path
+PATH_TO_JMODELTEST=$PWD/jmodeltest-2.1.10/jModelTest.jar
+MDLTSTTYPE=jmodeltest
+
+# Execute analysis
+INFILE=$WORKDIR/partitionedNex2MrBayes/examples/01_input/tiny_partitionfinder.mrbayes.NEW
+OUTSTEM=${INFILE%.nex*}_${MDLTSTTYPE}
+
+cd $WORKDIR/partitionedNex2MrBayes/examples/01_input/
+bash $PN2MB_SH -f $INFILE -c $PN2MB_CFG -t $MDLTSTTYPE -b $PATH_TO_JMODELTEST -o ${OUTSTEM}.mrbayes -v -k > ${OUTSTEM}.log
 ```
 
 
