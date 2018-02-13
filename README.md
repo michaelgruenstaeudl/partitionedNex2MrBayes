@@ -56,7 +56,7 @@ Input/Output of *partitNex2MrBayes*
 * __`input config file`__ (commandline option __`-c`__): name of, and file path to, the input CONFIG file. No default exists.
 * __`modeltesting type`__ (commandline option __`-t`__): name of partitionfinding/modeltesting tool selected. Available: jmodeltest, modeltest_ng, partitionfinder, partitiontest, sms. No default exists.
 * __`modeltesting tool`__ (commandline option __`-b`__): name of, and file path to, the partitionfinding/modeltesting binary or script. No default exists.
-* __`output file`__ (commandline option __`-b`__): name of, and file path to, the output file. No default exists.
+* __`output file`__ (commandline option __`-o`__): name of, and file path to, the output file. No default exists.
 
 #### Optional commandline switches
 * commandline switch __`-u`__: Estimating model fit only for the user-defined partitioning scheme. Only applicable for PartitionFinder. Default is off.
@@ -71,8 +71,30 @@ Input/Output of *partitNex2MrBayes*
 Example Usage
 -------------
 
-``` Foo bar baz ```
+##### 1. Setting input file and working directory
+``` 
+INFILE=/home/user/analysis/Gruenstaeudl_2017.nex
+INFSTEM=${INFILE%.nex*}
+WORKDIR=/home/user/analysis
+```
 
+##### 2. Setting script directory and script file
+```
+PN2MB_SH=/home/user/git/partitNex2MrBayes/partitNex2MrBayes.sh
+PN2MB_CFG=/home/user/git/partitNex2MrBayes/partitNex2MrBayes.cfg
+```
+
+##### 3. Setting third-party software tool
+```
+MDLTSTTYPE=partitionfinder
+PATH_TO_PARTITIONFINDER=/home/user/git/partitionfinder/PartitionFinder.py
+OUTSTEM=${INFSTEM}_${MDLTSTTYPE}
+```
+
+##### 4. Execute *partitNex2MrBayes*
+```
+bash $PN2MB_SH -f $INFILE -c $PN2MB_CFG -t $MDLTSTTYPE -b $PATH_TO_PARTITIONFINDER -o $WORKDIR/${OUTSTEM}.mrbayes -v -k > $WORKDIR/${OUTSTEM}.log
+```
 
 Current Issues
 --------------
