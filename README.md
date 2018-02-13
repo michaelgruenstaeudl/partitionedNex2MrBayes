@@ -40,18 +40,24 @@ Under each choice, a MrBayes command block is appended to the reassembled NEXUS 
 Input/Output of *partitNex2MrBayes*
 ----------------------------------
 
-## ARGS:
-    input data file:   name of, and file path to, the input NEXUS file
-    input config file: name of, and file path to, the input CONFIG file
-    modeltesting type: name of modeltesting tool used (available: jmodeltest, partitionfinder, sms)
-    modeltesting tool: name of, and file path to, the modeltesting binary or script
-    output file:       name of, and file path to, the output file
-## OUTP:
-    MRBAYES file:      a NEXUS file ready for analysis with MrBayes
+### Input arguments
+* __`input data file`__: name of, and file path to, the input NEXUS file
+* __`input config file`__: name of, and file path to, the input CONFIG file
+* __`modeltesting type`__: name of modeltesting tool used (available: jmodeltest, partitionfinder, sms)
+* __`modeltesting tool`__: name of, and file path to, the modeltesting binary or script
+* __`output file`__: name of, and file path to, the output file
 
+### Output:
+* __`MRBAYES file`__: a NEXUS file ready for analysis with MrBayes
+
+
+Current Issues
+--------------
+
+Foo bar baz
 
 
 Status
 ------
 
-Under active development
+Under active development; pre-alpha
