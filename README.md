@@ -26,6 +26,7 @@ For the impatient - Installing and running *partitionedNex2MrBayes*
 ```
 # Setting up temp directory
 WORKDIR=/home/mi/Desktop/myTest
+mkdir -p $WORKDIR
 cd $WORKDIR
 
 # Get partitionedNex2MrBayes
@@ -42,7 +43,7 @@ PN2MB_CFG=$WORKDIR/partitionedNex2MrBayes/partitNex2MrBayes.cfg
 git clone https://github.com/brettc/partitionfinder.git
 pip2.7 install --user numpy
 pip2.7 install --user pandas
-pip2.7 install --user pytables
+#pip2.7 install --user pytables
 pip2.7 install --user pyparsing
 pip2.7 install --user scipy
 pip2.7 install --user sklearn
