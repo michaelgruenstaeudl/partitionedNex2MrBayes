@@ -49,7 +49,7 @@ pip2.7 install --user scipy
 pip2.7 install --user sklearn
 
 # Set paths
-PATH_TO_PARTITIONFINDER=$PWD/partitionfinder/PartitionFinder.py
+PATH_TO_PARTITIONFINDER=$WORKDIR/partitionfinder/PartitionFinder.py
 MDLTSTTYPE=partitionfinder
 
 # Execute analysis
@@ -67,7 +67,7 @@ wget https://github.com/ddarriba/jmodeltest2/files/157117/jmodeltest-2.1.10.tar.
 tar xzf jmodeltest-2.1.10.tar.gz
 
 # Set path
-PATH_TO_JMODELTEST=$PWD/jmodeltest-2.1.10/jModelTest.jar
+PATH_TO_JMODELTEST=$WORKDIR/jmodeltest-2.1.10/jModelTest.jar
 MDLTSTTYPE=jmodeltest
 
 # Execute analysis
