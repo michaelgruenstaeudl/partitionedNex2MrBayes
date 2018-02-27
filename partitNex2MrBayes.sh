@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 
 ########################################################################
 
@@ -46,7 +47,7 @@ BOLD=`tput bold`
 REV=`tput smso`
 
 # Help function
-function my_help {
+my_help() {
     echo -e \\n"Help documentation for ${BOLD}$THIS_SCRIPT${NORM}."\\n
     echo -e "Version: $VERSION | Author: $AUTHOR"\\n
     echo -e "${REV}Usage:${NORM} $USAGE"\\n
@@ -126,7 +127,7 @@ assemble_mrbayes_block()
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
@@ -154,7 +155,7 @@ check_inp_outp_availability()
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
@@ -193,17 +194,17 @@ ensure_partitions_form_continuous_range()
     # INTERNAL FUNCTION CHECKS
     (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
     # Get charset definition lines
-    charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$2 | grep 'charset')
+    local charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$2 | grep 'charset')
     # Convert from discrete to continuous range
-    continuousRange=$(echo "$charsetLines" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
+    local continuousRange=$(echo "$charsetLines" | awk '{ split($4,curr,/[-;]/); currStart=curr[1]; currEnd=curr[2] } currStart > (prevEnd+1) { print "charset " "new"++cnt " = " prevEnd+1 "-" currStart-1 ";" } { print; prevEnd=currEnd }')
     # Add concluding partition, if missing
-    matrxLngth=$3
-    closingRange=$(echo "$continuousRange" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
+    local matrxLngth=$3
+    local closingRange=$(echo "$continuousRange" | tail -n1 | awk -F'[[:space:]]*|-' -v lngth=$matrxLngth ' $5<lngth {print "charset newFinal = " $5+1 "-" lngth ";"}')
     # Update SETS-block
     echo "begin sets;" > ./$1/$2
     echo "$continuousRange" >> ./$1/$2 # NOTE: $continuousRange is a multi-line variable, whose linebreaks shall be maintained; thus, it is passed as doublequote-enclosed.
@@ -218,8 +219,8 @@ get_num_of_avail_cores()
 #   INP:  none
 #   OUP:  returns integer
 {
-    nmbrCores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null)  # NOTE: The "||" indicates that if "nproc" fails, do "grep ^processor /proc/cpuinfo".
-    posIntgr='^[0-9]+$'
+    local nmbrCores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null)  # NOTE: The "||" indicates that if "nproc" fails, do "grep ^processor /proc/cpuinfo".
+    local posIntgr='^[0-9]+$'
     if ! [[ $nmbrCores =~ $posIntgr ]]; then
         nmbrCores=1
     fi
@@ -237,7 +238,7 @@ reconstitute_datablock_as_interleaved()
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
@@ -269,24 +270,24 @@ reformat_config_file()
     # INTERNAL FUNCTION CHECKS
     (($# == 3)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
     ## REMOVES LEADING WHITESPACES FROM EVERY LINE
     #  (so that formatting (i.e., indets) does not matter)
-    configWithoutLeadWhitesp=$(sed -e 's/^[ \t]*//' $1)
+    local configWithoutLeadWhitesp=$(sed -e 's/^[ \t]*//' $1)
 
     ## REMOVES COMMENTS FROM A CONFIG FILE
     #  (i.e., delete all info that starts with a pound sign)
-    configWithoutComments=$(echo "$configWithoutLeadWhitesp" | grep -v "^#")
+    local configWithoutComments=$(echo "$configWithoutLeadWhitesp" | grep -v "^#")
 
     ## REMOVES BLANK LINES
     #  (both blank by whitespaces and by tabs)
-    configWithoutBlankLines=$(echo "$configWithoutComments" | sed '/^\s*$/d')
+    local configWithoutBlankLines=$(echo "$configWithoutComments" | sed '/^\s*$/d')
 
     ## KEEP ONLY CONFIGURATION OF MODELTEST TYPE SELECTED
-    configOnlyTypeSelected=$(echo "$configWithoutBlankLines" | grep -A1 --ignore-case --no-group-separator "\%$2\|\%mrbayes")
+    local configOnlyTypeSelected=$(echo "$configWithoutBlankLines" | grep -A1 --ignore-case --no-group-separator "\%$2\|\%mrbayes")
 
     echo "$configOnlyTypeSelected" > $3
 }
@@ -305,21 +306,21 @@ reformat_nexus_file()
     # INTERNAL FUNCTION CHECKS
     (($# == 2)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
     ## REMOVES COMMENTS FROM A NEXUS FILE
     #  (i.e., delete all info enclosed by square brackets)
-    nexusWithoutComments=$(sed 's/\[[^]]*\]//g' $1)
+    local nexusWithoutComments=$(sed 's/\[[^]]*\]//g' $1)
 
     ## REMOVES BLANK LINES
     #  (both blank by whitespaces and by tabs)
-    nexusWithoutBlankLines=$(echo "$nexusWithoutComments" | sed '/^\s*$/d')
+    local nexusWithoutBlankLines=$(echo "$nexusWithoutComments" | sed '/^\s*$/d')
 
     ## REMOVES LEADING WHITESPACES FROM EVERY LINE
     #  (so that formatting (i.e., indets) does not matter)
-    nexusWithoutLeadWhitesp=$(echo "$nexusWithoutBlankLines" | sed -e 's/^[ \t]*//')
+    local nexusWithoutLeadWhitesp=$(echo "$nexusWithoutBlankLines" | sed -e 's/^[ \t]*//')
 
     ## STANDARDIZES CRITICAL COMMAND LINES AS LOWERCASE (i.e., converts 
     ## ENTIRE LINE that starts with a keyword TO LOWERCASE)
@@ -327,21 +328,21 @@ reformat_nexus_file()
     #        section identifikation below.
     #  keyword1: "begin", line ends with semi-colon
     #  NOTE: the following command converts "Begin Data;" to "begin data;", not just "begin"!
-    reformatForKeyword1=$(echo "$nexusWithoutLeadWhitesp" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
+    local reformatForKeyword1=$(echo "$nexusWithoutLeadWhitesp" | awk 'BEGIN{IGNORECASE=1} /^ *begin\>.*; *$/ {$0=tolower($0)} 1')
     #  keyword2: "end;"
-    reformatForKeyword2=$(echo "$reformatForKeyword1" | awk 'BEGIN{IGNORECASE=1} /^ *end\;/ {$0=tolower($0)} 1')
+    local reformatForKeyword2=$(echo "$reformatForKeyword1" | awk 'BEGIN{IGNORECASE=1} /^ *end\;/ {$0=tolower($0)} 1')
     #  keyword3: "matrix"
-    reformatForKeyword3=$(echo "$reformatForKeyword2" | awk 'BEGIN{IGNORECASE=1} /^ *matrix\>/ {$0=tolower($0)} 1')
+    local reformatForKeyword3=$(echo "$reformatForKeyword2" | awk 'BEGIN{IGNORECASE=1} /^ *matrix\>/ {$0=tolower($0)} 1')
     #  keyword4: "dimensions", line ends with semi-colon
-    reformatForKeyword4=$(echo "$reformatForKeyword3" | awk 'BEGIN{IGNORECASE=1} /^ *dimensions\>.*; *$/ {$0=tolower($0)} 1')
+    local reformatForKeyword4=$(echo "$reformatForKeyword3" | awk 'BEGIN{IGNORECASE=1} /^ *dimensions\>.*; *$/ {$0=tolower($0)} 1')
     #  keyword5: "format", line ends with semi-colon
-    reformatForKeyword5=$(echo "$reformatForKeyword4" | awk 'BEGIN{IGNORECASE=1} /^ *format\>.*; *$/ {$0=tolower($0)} 1')
+    local reformatForKeyword5=$(echo "$reformatForKeyword4" | awk 'BEGIN{IGNORECASE=1} /^ *format\>.*; *$/ {$0=tolower($0)} 1')
     #  Convert only specific keyword to lowercase
-    reformatForKeyword6=$(echo "$reformatForKeyword5" | awk 'tolower($1)=="charset"{$1=tolower($1)}1')
+    local reformatForKeyword6=$(echo "$reformatForKeyword5" | awk 'tolower($1)=="charset"{$1=tolower($1)}1')
 
     ## SORT CHARSETS
-    charsetLines=$(echo "$reformatForKeyword6" | sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' | grep 'charset')
-    charsetLinesSorted=$(echo "$charsetLines" | sort -t'=' -k2n)
+    local charsetLines=$(echo "$reformatForKeyword6" | sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' | grep 'charset')
+    local charsetLinesSorted=$(echo "$charsetLines" | sort -t'=' -k2n)
     
     ## REMOVES LINES FROM THE SETS-BLOCK THAT DO NOT START WITH THE KEYWORD "CHARSET"
     #  NOTE: This check must come after the conversion to lowercase chars!
@@ -354,7 +355,7 @@ reformat_nexus_file()
 
     ## CHECK THAT DATATYPE IS "DNA|dna"
     #  NOTE: This check must come after the conversion to lowercase chars!
-    dataTypeB=$(cat $2 | grep format | sed -n 's/.*datatype=\([^ ]*\).*/\1/p') # Extract info on datatype
+    local dataTypeB=$(cat $2 | grep format | sed -n 's/.*datatype=\([^ ]*\).*/\1/p') # Extract info on datatype
     if [ ! "$dataTypeB" = "dna" ]; then
         echo -ne " ERROR | $(get_current_time) | Datatype not set as: DNA\n"
         exit 1
@@ -374,21 +375,21 @@ split_matrix_into_partitions()
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$2)
-    charsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$3 | grep 'charset')
-    dimensnLns=$(sed -e '/matrix/,$d' ./$1/$2) # Get section between "#NEXUS" and "MATRIX"
-    partitionCounter=0
+    local pureMatrix=$(sed -n '/matrix/{:a;n;/;/b;p;ba}' ./$1/$2)
+    local charsetLns=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$3 | grep 'charset')
+    local dimensnLns=$(sed -e '/matrix/,$d' ./$1/$2) # Get section between "#NEXUS" and "MATRIX"
+    local partitionCounter=0
     while IFS= read -r line; do 
         partitionCounter=$((partitionCounter+1))
-        partitFn1=$(printf %04d $partitionCounter)
-        partitFn2=$(echo "$line" | awk '{print $2}')
-        partitnFn=$4_partition_${partitFn1}_${partitFn2}
+        local partitFn1=$(printf %04d $partitionCounter)
+        local partitFn2=$(echo "$line" | awk '{print $2}')
+        local partitnFn=$4_partition_${partitFn1}_${partitFn2}
         # Get the info on the charset range
-        charsetRanges=$(echo "$line" | awk -F"=" '{print $2}' | awk -F";" '{print $1}' | awk '{$1=$1;print}')
+        local charsetRanges=$(echo "$line" | awk -F"=" '{print $2}' | awk -F";" '{print $1}' | awk '{$1=$1;print}')
         
         # Assembling the new partition file
         echo -e "#NEXUS\n \n$dimensnLns \nmatrix" > ./$1/$partitnFn
@@ -403,7 +404,7 @@ split_matrix_into_partitions()
         echo -e ";\nend;\n" >> ./$1/$partitnFn
         
         # Get the length of the sub-matrix
-        mtrxLngth=$(cat ./$1/$partitnFn | grep -A1 "matrix" | tail -n1 | awk '{print $2}' | awk '{$1=$1;print}' | tr -d '\n' | wc -c) # NOTE: Also delete newline chars with "tr -d '\n'" for counting characters
+        local mtrxLngth=$(cat ./$1/$partitnFn | grep -A1 "matrix" | tail -n1 | awk '{print $2}' | awk '{$1=$1;print}' | tr -d '\n' | wc -c) # NOTE: Also delete newline chars with "tr -d '\n'" for counting characters
         # Replace the number of characters with the length of the sub-matrix
         sed -i "/dimensions / s/nchar\=.*\;/nchar\=$mtrxLngth\;/" ./$1/$partitnFn
     done <<< "$charsetLns" # Using a here-string
@@ -421,7 +422,7 @@ split_nexus_into_blocks()
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
@@ -450,14 +451,14 @@ test_if_partitions_overlap()
     # INTERNAL FUNCTION CHECKS
     (($# == 2)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
     
-    charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$2 | grep 'charset')
-    charsetRanges=$(echo "$charsetLines" | awk -F"=" '{print $2}' | sed 's/\;//')
+    local charsetLines=$(sed -n '/begin sets\;/{:a;n;/end\;/b;p;ba}' ./$1/$2 | grep 'charset')
+    local charsetRanges=$(echo "$charsetLines" | awk -F"=" '{print $2}' | sed 's/\;//')
     # Test if any of the charset ranges are overlapping
-    charsetOverlap=$(echo "$charsetRanges" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
+    local charsetOverlap=$(echo "$charsetRanges" | awk -F"-" 'Q>=$1 && Q{print val}{Q=$NF;val=$0}')
     if [ ! "$charsetOverlap" = "" ]; then 
         echo -ne " ERROR | $(get_current_time) | Charset range overlaps with subsequent range: $charsetOverlap\n"
         exit 1
@@ -482,35 +483,36 @@ assemble_new_blocks_given_partition_scheme()
     # INTERNAL FUNCTION CHECKS
     (($# == 6)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
     for ((i=1; i<=$#; i++)); do
-        argVal="${!i}"
+        local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
     done
 
-    count=$(ls -1 ./$1/$3_partition_[0-9]* 2>/dev/null | wc -l)
+    local count=$(ls -1 ./$1/$3_partition_[0-9]* 2>/dev/null | wc -l)
     if [ $count != 0 ]; then
         
         # Add seqnames to matrix
-        reconstMatrix=$(cat ./$1/$3_partition_0001_* | sed -n '/matrix/{:a;n;/;/b;p;ba}' | awk '{print $1 " "}') # Add only seqnames to matrix
-        nucleotideCounter=0
+        local reconstMatrix=$(cat ./$1/$3_partition_0001_* | sed -n '/matrix/{:a;n;/;/b;p;ba}' | awk '{print $1 " "}') # Add only seqnames to matrix
+        local nucleotideCounter=0
         for newPartit in ./$1/$3_partition_[0-9]*; do
             # Extract matrix from partition
-            partitMatrix=$(cat $newPartit | sed -n '/matrix/{:a;n;/;/b;p;ba}' | awk '{print $2}' | sed -e 's/^[ \t]*//') # NOTE: "sed -e 's/^[ \t]*//'" removes leading whitespaces
+            local partitMatrix=$(cat $newPartit | sed -n '/matrix/{:a;n;/;/b;p;ba}' | awk '{print $2}' | sed -e 's/^[ \t]*//') # NOTE: "sed -e 's/^[ \t]*//'" removes leading whitespaces
             # Generating new charset lines
             #charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $3"_"$4}')
-            charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $4}')
-            charsetLine=$(echo "charset $charsetName")
+            local charsetName=$(echo $(basename $newPartit) | awk -F"_" '{print $4}')
+            local charsetLine=$(echo "charset $charsetName")
             if [ $nucleotideCounter -eq 0 ]; then # NOTE: Counting starts at zero for length measurement, but at 1 for index positions
                 charsetLine+=$(echo " = 1-")
             else
                 charsetLine+=$(echo " = $((nucleotideCounter+1))-")
             fi
-            partitionLength=$(echo "$partitMatrix" | head -n1 | wc -c)
+            local partitionLength=$(echo "$partitMatrix" | head -n1 | wc -c)
             nucleotideCounter=$((nucleotideCounter+$partitionLength-1))
             charsetLine+=$(echo "$nucleotideCounter;")
-            reconstCharsets+=$(echo "$charsetLine\n")
+            local reconstCharsets+=$(echo "$charsetLine\n")
             # Appending (and growing) the matrix
-            matrixHandle=$(paste -d'\0' <(echo "$reconstMatrix") <(echo "$partitMatrix")) # NOTE: '\0' is defined as null delimiter (i.e., no character) by POSIX
-            reconstMatrix=$(echo "$matrixHandle")
+            local matrixHandle=$(paste -d'\0' <(echo "$reconstMatrix") <(echo "$partitMatrix")) # NOTE: '\0' is defined as null delimiter (i.e., no character) by POSIX
+            local reconstMatrix=$(echo "$matrixHandle")
+        
         done
 
         # Transfer partition and model info to variable $reconstCharsets
