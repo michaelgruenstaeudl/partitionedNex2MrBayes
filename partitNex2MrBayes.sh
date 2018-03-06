@@ -126,11 +126,14 @@ assemble_mrbayes_block()
 {
     # INTERNAL FUNCTION CHECKS
     (($# == 4)) || { printf " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n"; exit 1; }
+    #k: (($# == 4)) || { echo " ERROR | $(get_current_time) | The following function received an incorrect number of arguments: ${FUNCNAME[0]}\n">&2; exit 1; }
     for ((i=1; i<=$#; i++)); do
         local argVal="${!i}"
         [[ -z "${argVal// }" ]] && { printf " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n"; exit 2; }
+        #k: [[ -z "${argVal}" ]] && { echo " ERROR | $(get_current_time) | The following function received an empty input argument: ${FUNCNAME[0]}\n">&2; exit 2; }
+
     done
-    
+        
     charsetLines=$(cat ./$1/$2 | grep 'charset')
     echo -e 'begin mrbayes;' >> $4
     echo "$charsetLines" >> $4
