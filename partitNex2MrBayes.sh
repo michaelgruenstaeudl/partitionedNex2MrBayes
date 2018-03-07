@@ -135,6 +135,7 @@ assemble_mrbayes_block()
     done
         
     charsetLines=$(cat ./$1/$2 | grep 'charset')
+    #k: charsetLines=$(grep 'charset' ./$1/$2)
     echo -e 'begin mrbayes;' >> $4
     echo "$charsetLines" >> $4
     echo -n 'partition combined =' $(echo "$charsetLines" | wc -l) ': ' >> $4 # Line must not end with linebreak, thus -n
